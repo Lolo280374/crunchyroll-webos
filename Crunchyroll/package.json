@@ -1,0 +1,21 @@
+{
+  "name": "crunchyroll-linux",
+  "version": "1.0.2",
+  "description": "Linux Frontend for Crunchyroll",
+  "main": "index.js",
+  "scripts": {
+    "start": "sh ./electron_build.sh && cd electron && npm install && npm run start",
+    "electron-build": "sh ./electron_build.sh && cd electron && npm install && npm run build"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/aarron-lee/crunchyroll-linux.git"
+  },
+  "author": "aarron-lee",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/aarron-lee/crunchyroll-linux/issues"
+  },
+  "homepage": "https://github.com/aarron-lee/crunchyroll-linux",
+  "devDependencies": {}
+}

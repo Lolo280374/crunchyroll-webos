@@ -1,0 +1,145 @@
+#search-screen {
+  width: 100%;
+  height: 100%;
+  background: #000;
+  overflow: hidden;
+}
+
+#search-screen .content {
+  height: 100vh;
+  /* transition: margin 0.5s; */
+  padding: 60px 60px 60px 8.5vw;
+}
+
+#search-screen .content .input {
+  position: relative;
+  display: flex;
+  margin: 0 auto;
+  /* transition: border-color 0.2s cubic-bezier(0.5, 0, 0.25, 1); */
+  padding: 5px 15px;
+  width: 40%;
+  margin: auto;
+}
+
+#search-screen .content .input::after {
+  content: "";
+  width: 100%;
+  height: 0.3rem;
+  background: rgba(255, 255, 255, 0.5);
+  position: absolute;
+  bottom: -0.3rem;
+  left: 0px;
+}
+
+#search-screen .content .input.focus::after {
+  background: #f47521;
+  /* box-shadow: 0 0 25px 6px #f47521, 0 0 15px 6px #f47521 inset; */
+}
+
+#search-screen .content .input input {
+  border: none;
+  color: #fff;
+  display: block;
+  flex: 1 1 auto;
+  font-size: 2rem;
+  padding-bottom: 0.25rem;
+  padding-top: 0;
+  width: 100%;
+  background: transparent;
+  text-align: center;
+}
+
+#search-screen .content .list-container {
+  overflow: hidden;
+  height: 100%;
+  position: relative;
+  padding-top: 80px;
+  margin-top: 5px;
+}
+
+#search-screen .content .list-container .list-container-over {
+  /* FORCE FOR OLD VERSION OF TIZEN*/
+  display: flex;
+  flex-wrap: wrap;
+  margin-left: -30px;
+  /* display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  grid-gap: 30px; */
+  /* transition: margin 100ms ease-out; */
+}
+
+#search-screen .content .list-container .list-container-over:before {
+  content: '';
+  width: 102vw;
+  left: -1vw;
+  height: 75px;
+  position: absolute;
+  z-index: 1;
+  background: linear-gradient(black, transparent);
+  top: 0;
+}
+
+#search-screen .content .list-container .list-container-over:after {
+  content: '';
+  position: fixed;
+  width: 100vw;
+  height: 75px;
+  bottom: 0;
+  left: 0;
+  background: linear-gradient(transparent, black);
+}
+
+#search-screen .content .list-container .list-container-over .item {
+  background: rgba(100, 100, 100, 0.5);
+  opacity: 0.5;
+  position: relative;
+  /* FORCE FOR OLD VERSION OF TIZEN*/
+  max-width: 160px;
+  margin-bottom: 30px;
+  margin-left: 30px;
+}
+
+#search-screen .content .list-container .list-container-over .item .title {
+  background: rgba(0, 0, 0, 0.75);
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  text-align: center;
+  font-size: 1.5rem;
+  color: white;
+  
+  width: 100%;
+  height: 3.5rem;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+#search-screen .content .list-container .list-container-over .item img {
+  width: 100%;
+  height: 100%;
+}
+
+#search-screen .content .list-container .list-container-over .item.selected {
+  opacity: 0.5;
+}
+
+#search-screen .content .list-container.focus .list-container-over .item.selected {
+  opacity: 1;
+}
+
+#search-screen .content .list-container .list-container-over .item.selected::after{
+  content: "";
+  width: 100%;
+  height: 100%;
+  position: absolute;
+  top: 0;
+  left: 0;
+  box-sizing: border-box;
+  border: 3px solid rgb(114, 114, 114);
+}
+
+#search-screen .content .list-container.focus .list-container-over .item.selected::after{
+  border: 3px solid rgba(244, 130, 33, 0.9);
+}

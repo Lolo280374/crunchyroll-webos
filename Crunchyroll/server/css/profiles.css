@@ -1,0 +1,89 @@
+#profiles-screen {
+  width: 100%;
+  height: 100%;
+  background: #000;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#profiles-screen .content {
+  display: flex;
+  justify-content: center;
+  height: 65vh;
+  min-width: 70vw;
+}
+
+#profiles-screen .content .container {
+  padding: 0 70px;
+  flex: 1;
+  position: relative;
+}
+
+#profiles-screen .content .container-mid {
+  padding: 0 50px;
+  width: 40%;
+  position: relative;
+}
+
+#profiles-screen .content .container-mid ul,
+#profiles-screen .content .container ul {
+  padding: 0;
+}
+
+#profiles-screen .content .container-mid ul li,
+#profiles-screen .content .container ul li {
+  opacity: 0.5;
+  margin: 25px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  border: 2px solid transparent;
+  display: inline-block;
+  width: 254px;
+}
+
+#profiles-screen .content .container-mid ul li img,
+#profiles-screen .content .container ul li img {
+  border-radius: 50%;
+  border: 10px solid transparent;
+  height: 250px;
+  width: 250px;
+}
+
+#profiles-screen .content .container-mid ul li.selected,
+#profiles-screen .content .container ul li.selected {
+  opacity: 1;
+}
+
+#profiles-screen .content .container-mid ul li.selected img,
+#profiles-screen .content .container ul li.selected img {
+  border: 10px solid rgba(244, 130, 33, 0.9);
+}
+
+#profiles-screen .content .container-mid ul li span,
+#profiles-screen .content .container ul li span {
+  color: #fff;
+  font-size: 3vh;
+  width: 100%;
+  display: block;
+  text-align: center;
+  padding: 20px 0;
+}
+
+#profiles-screen .content .container-mid .legend,
+#profiles-screen .content .container .legend {
+  color: #fff;
+  font-size: 6vh;
+  text-align: center;
+  padding: 30px 0;
+}
+
+#profiles-screen .content #settings-details {
+  overflow: hidden;
+}
+
+#profiles-screen .content .container .list-active {
+  height: 100%;
+  margin: 0;
+}

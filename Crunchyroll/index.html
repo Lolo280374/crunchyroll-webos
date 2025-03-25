@@ -1,58 +1,80 @@
-<!--
-Copyright (c) 2024 LG Electronics Inc.
-
-SPDX-License-Identifier: Apache-2.0
--->
-
 <!DOCTYPE html>
 <html>
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0"
+    />
+    <meta name="description" content="Crunchyroll by difix" />
+    <meta name="author" content="Jocs" />
+    <title>Crunchyroll</title>
 
-<head>
-	<title>new app</title>
-	<style type="text/css">
-		body {
-			width: 100%;
-			height: 100%;
-			background-color: #202020;
-		}
+    <!-- platform imports -->
+    <!-- start css -->
+    <script src="js/keys.js"></script>
+    <script src="js/app.js"></script>
 
-		div {
-			position: absolute;
-			height: 100%;
-			width: 100%;
-			display: table;
-		}
+    <link rel="stylesheet" href="css/app.css" />
+    <link rel="stylesheet" href="server/css/icons/font-awesome.min.css" />
+    <link rel="stylesheet" href="server/css/slick.css" />
+    <link rel="stylesheet" href="server/css/loading.css" />
+    <link rel="stylesheet" href="server/css/exit.css" />
+    <link rel="stylesheet" href="server/css/login.css" />
+    <link rel="stylesheet" href="server/css/mylist.css" />
+    <link rel="stylesheet" href="server/css/search.css" />
+    <link rel="stylesheet" href="server/css/history.css" />
+    <link rel="stylesheet" href="server/css/browse.css" />
+    <link rel="stylesheet" href="server/css/profiles.css" />
+    <link rel="stylesheet" href="server/css/changelog.css" />
+    <link rel="stylesheet" href="server/css/home.css" />
+    <link rel="stylesheet" href="server/css/video.css" />
+    <link rel="stylesheet" href="server/css/keyboard.css" />
+    <link rel="stylesheet" href="server/css/menu.css" />
+    <link rel="stylesheet" href="server/css/settings.css" />
+    <!-- end css -->
+  </head>
 
-		h1 {
-			display: table-cell;
-			vertical-align: middle;
-			text-align: center;
-			color: #FFFFFF;
-		}
-
-	</style>
-</head>
-
-<script src="webOSTVjs-1.2.10/webOSTV.js" charset="utf-8"></script>
-<script src="webOSTVjs-1.2.10/webOSTV-dev.js" charset="utf-8"></script>
-<script type="text/javascript">
-	//sample code for calling LS2 API
-	webOS.service.request("luna://com.palm.systemservice", {
-		method: "clock/getTime",
-		parameters: {},
-		onSuccess: function (args) {
-			console.log("UTC:", args.utc);
-		},
-		onFailure: function (args) {
-			console.log("Failed to getTime");
-		}
-	});
-</script>
-
-<body>
-	<div>
-		<h1>Hello, World!</h1>
-	</div>
-</body>
-
+  <body onkeydown="app.keyDown(event)">
+    <!-- <div id="console"></div> -->
+    <div id="error-screen">
+      <div class="content">
+        <div class="logo">
+          <img src="img/error.png" alt="" />
+        </div>
+        <div class="details">
+          <div class="code">404</div>
+          <div class="text">Error connecting to server.</div>
+        </div>
+      </div>
+    </div>
+    <!-- start js -->
+    <script src="server/js/core/dash.min.js"></script>
+    <script src="server/js/core/jquery.min.js"></script>
+    <script src="server/js/core/slick.min.js"></script>
+    <script src="server/js/core/mappers/crunchyroll.js"></script>
+    <script src="server/js/core/translate.js"></script>
+    <script src="server/js/core/languages.js"></script>
+    <script src="server/js/core/session.js"></script>
+    <script src="server/js/core/player.js"></script>
+    <script src="server/js/core/service.js"></script>
+    <script src="server/js/screen/loading.js"></script>
+    <script src="server/js/screen/exit.js"></script>
+    <script src="server/js/screen/login.js"></script>
+    <script src="server/js/screen/mylist.js"></script>
+    <script src="server/js/screen/search.js"></script>
+    <script src="server/js/screen/history.js"></script>
+    <script src="server/js/screen/browse.js"></script>
+    <script src="server/js/screen/profiles.js"></script>
+    <script src="server/js/screen/changelog.js"></script>
+    <script src="server/js/screen/home.js"></script>
+    <script src="server/js/screen/home.details.js"></script>
+    <script src="server/js/screen/home.episodes.js"></script>
+    <script src="server/js/screen/video.js"></script>
+    <script src="server/js/screen/keyboard.js"></script>
+    <script src="server/js/screen/menu.js"></script>
+    <script src="server/js/screen/settings.js"></script>
+    <script src="server/js/main.js"></script>
+    <!-- end js -->
+  </body>
 </html>
