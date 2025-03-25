@@ -1,4 +1,7 @@
 # Crunchyroll for Linux
+# NOTE: THE APP SHOULD CURRENTLY WORK BUT I COULDN'T TEST IT ON ACTUAL TV HARDWARE (DRM MAKES PLAYBACK IMPOSSIBLE ON EMULATORS, SEE BELOW).
+
+![drm-issue.png](https://raw.githubusercontent.com/Lolo280374/crunchyroll-webos/master/drm-issue.png)
 
 [![](https://img.shields.io/github/downloads/aarron-lee/crunchyroll-linux/total.svg)](https://github.com/aarron-lee/crunchyroll-linux/releases)
 
