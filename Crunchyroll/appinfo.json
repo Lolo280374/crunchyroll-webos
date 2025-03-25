@@ -1,0 +1,10 @@
+{
+  "id": "io.crunchyroll.lolodotzip",
+  "version": "0.1.0",
+  "vendor": "My Company",
+  "type": "web",
+  "main": "index.html",
+  "title": "Crunchyroll",
+  "icon": "icon.png",
+  "largeIcon": "largeIcon.png"
+}
