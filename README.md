@@ -1,25 +1,20 @@
-# Crunchyroll - WebOS TV App
+![background](https://github.com/user-attachments/assets/0eb8dfad-ca8c-4132-84dd-d0fda215693f)
+# Crunchyroll - LG webOS Client (for older TVs, not supporting the official app)
 
-**PERSONAL NOTE:** THIS IS A EDIT OF THE ALREADY EXISTING CRUNCHYROLL APP ON THE HB APP STORE TO FIX THE LOGIN ISSUES ASWELL AS PLAYBACK. THIS VERSION WILL hopefully FIX ALL OF THEM. THIS IS NOT A NEW APP. YOU WILL HAVE TO INSTALL NODE MODULES TO GET BUILDING AND COMPILING.
+**VERY IMPORTANT:** This client is a "fork" of the already existing webOS client by mateussouzaweb. It serves as an objective to run on older TVs than webOS 4, fix the login and playback issues on his client, aswell as update some of the stuff that are old. This is not a "new" client.
 
-**IMPORTANT NOTICE:** Crunchyroll now has a official app for WebOS TVs. We strongly recommend you to use the official app for better user experience.
-
-*Crunchyroll&trade; is a registered trademark of the Sony Pictures Entertainment Inc. This project is not affiliated with Crunchyroll, Team Crunchyroll, or the Sony Pictures Entertainment Inc.*
+## Roadmap
+Currently, I'm mostly concerned about getting the login issues adressed. Normally, that's already fixed in the latest release. The latest patch also brought the latest artworks for the app.
+Up next would be fixing the playback issue, which is not on the correct endpoint. Lastly, it would be a matter of releasing it on the HB AppStore.
 
 ## About
-
-Unofficial WebOS TV app for Crunchyroll for those who want to try an alternative solution.
-
-Compatible with webOS TV 4.x or more recent.
+This is once again like I said a workaround for people with older TVs than webOS 4, so thoses that it can't run natively using the native app.
+Compatible with webOS TV 3.5 or more recent.
 
 ## Download and Installation
+Your only shot at installing it currently is by grabbing the latest build from GitHub actions, or a more stable one via releases. You can then install it either via SSH if you rooted your TV, or via the LG webOS Dev Manager. I won't be doing tutorials on that for today.
 
-You can download and install this app in your WebOS TV following one of the guides below:
-
-- Using [HomeBrew](https://www.webosbrew.org) TV app (recommended).
-- Using [dev-manager-desktop](https://github.com/webosbrew/dev-manager-desktop) from computer.
-- Downloading IPK from [latest release](https://github.com/mateussouzaweb/crunchyroll-webos/releases/latest) page and install using [WebOS SDK](https://webostv.developer.lge.com/develop/tools/cli-introduction).
-
+# This part is the same as the original project, since it's essentially the same steps. I'll make a better readme once we reach a "final" usable product stage.
 ## Developing with Docker
 
 You are more than welcome to contribute to this project! To make the development process easier for everyone, we encourage you to build a container that will include all the dependencies. Here are the necessary steps:
@@ -105,4 +100,3 @@ flatpak run com.google.Chrome \
   --no-first-run \
   file://$PWD/dist/index.html
 ```
-
