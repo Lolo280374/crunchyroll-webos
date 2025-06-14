@@ -1,0 +1,82 @@
+<h1 tabindex="0">Explore</h1>
+
+<div class="list-filters">
+    <div class="dropdown" tabindex="0" data-dropdown>
+        <input type="hidden" id="category" name="category" value="{{ category }}">
+        <div class="dropdown-value">Category</div>
+        <div class="dropdown-list">
+            <ul>
+                {{ each option in categories }}
+                    <li tabindex="0" data-value="{{ option.id }}">{{ option.name }}</li>
+                {{ end }}
+            </ul>
+        </div>
+    </div>
+    {{ if !special }}
+        <div class="dropdown" tabindex="0" data-dropdown>
+            <input type="hidden" id="sort" name="sort" value="{{ sort }}">
+            <div class="dropdown-value">Sort By</div>
+            <div class="dropdown-list">
+                <ul>
+                    <li tabindex="0" data-value="popularity">Popular</li>
+                    <li tabindex="0" data-value="newly_added">Newest</li> 
+                    <li tabindex="0" data-value="alphabetical">Alphabetical</li>
+                </ul>
+            </div>
+        </div>
+    {{ end }}
+</div>
+
+{{ if error && message }}
+    <div class="error-message">
+        <p>{{ message }}</p>
+    </div>
+{{ end }}
+
+{{ if !loaded }}
+    <p>Loading...</p>
+{{ end }}
+
+{{ if loaded && !special && items && items.length }}
+    <div class="list-info">
+        <p>{{ total }} {{ total == 1 ? 'serie in this category' : 'series in this category'}}</p>
+    </div>
+{{ end }}
+
+{{ if items && items.length }}
+    <div class="list-items">
+        {{ each item in items }}
+            <div class="list-item explore-item">
+                <a href="serie/{{ item.id }}" class="list-item-inside" tabindex="0">
+                    <div class="list-item-image">
+                        <img src="{{ item.image }}" 
+                            title="{{ item.name }}" 
+                            width="640" 
+                            height="960" 
+                            loading="lazy" />
+                    </div>
+                    <div class="list-item-info">
+                        <h2>{{ item.name }}</h2>
+                    </div>
+                </a>
+            </div>
+        {{ end }}
+    </div>
+{{ elseif loaded && !error && !items.length }}
+    <p>No results found.</p>
+{{ end }}
+
+{{ if previousPage || nextPage }}
+    <div class="list-pagination">
+        {{ if previousPage }}
+            <a href="{{ previousPage }}" title="Previous page" tabindex="0">
+                <span>Previous Page</span>
+            </a>
+        {{ end }}
+        {{ if nextPage }}
+            <a href="{{ nextPage }}" title="Next page" tabindex="0">
+                <span>Next Page</span>
+            </a>
+        {{ end }}
+    </div>
+{{ end }}

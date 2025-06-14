@@ -1,0 +1,16 @@
+{
+    "id": "com.crunchyroll.webos",
+    "version": "1.10.2",
+    "vendor": "Mateus Souza",
+    "type": "web",
+    "main": "index.html",
+    "title": "Crunchyroll",
+    "appDescription": "Unofficial Crunchyroll app for WebOS TV",
+    "icon": "images/80px.png",
+    "largeIcon": "images/130px.png",
+    "splashBackground": "images/background.png",
+    "bgImage": "images/background.png",
+    "bgColor": "#F37521",
+    "iconColor": "#F37521",
+    "disableBackHistoryAPI": false
+}

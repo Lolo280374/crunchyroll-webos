@@ -1,0 +1,46 @@
+<h1 tabindex="0">Watchlist</h1>
+
+{{ if error && message }}
+    <div class="error-message">
+        <p>{{ message }}</p>
+    </div>
+{{ end }}
+
+{{ if !loaded }}
+    <p>Loading...</p>
+{{ end }}
+
+{{ if items && items.length }}
+
+    <div class="list-items">
+        {{ each item in items }}
+        <div class="list-item watchlist-item"
+            data-episode
+            data-episode-id="{{ item.id }}"
+            data-episode-number="{{ item.number }}"
+            data-episode-name="{{ item.name }}"
+            data-episode-duration="{{ item.duration }}"
+            data-episode-playhead="{{ item.playhead }}"
+            data-episode-premium="{{ item.premium }}">
+            <a href="serie/{{ item.serie_id }}/season/{{ item.season_id }}/episode/{{ item.id }}/video" class="list-item-inside" tabindex="0">
+                <div class="list-item-image">
+                    <img src="{{ item.image }}" 
+                        title="{{ item.serie_name }} - E{{ item.number }} - {{ item.name }}" 
+                        loading="lazy"/>
+                    <div class="list-item-progress hidden">&nbsp;</div>
+                    <div class="list-item-premium hidden">&nbsp;</div>
+                </div>
+                <div class="list-item-info">
+                    <h2>{{ item.serie_name }}</h2>
+                    <h3>E{{ item.number }} - {{ item.name }}</h3>
+                </div>
+            </a>
+        </div>
+        {{ end }}
+    </div>
+
+{{ elseif loaded && !error && !items.length }}
+
+    <p>Looks like you don't have anything on watchlist yet. Try adding some series to the watchlist first.</p>
+
+{{ end }}

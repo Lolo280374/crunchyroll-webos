@@ -1,0 +1,17 @@
+{
+    "compilerOptions": {
+        "baseUrl": "./src/",
+        "isolatedModules": true,
+        "module": "ES6",
+        "target": "ES3",
+        "lib": [
+            "ES2018",
+            "DOM"
+        ]
+    },
+    "exclude": [
+        "node_modules",
+        "com.crunchyroll.webos",
+        "dist"
+    ]
+}

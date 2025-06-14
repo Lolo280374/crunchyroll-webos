@@ -1,0 +1,12 @@
+*.~
+*.*~
+*.swp
+.DS_Store
+.buildpath
+.project
+.settings
+
+com.crunchyroll.webos/
+node_modules/
+dist/
+bin/

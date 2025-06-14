@@ -1,0 +1,138 @@
+/* MENU */
+#menu {
+    align-items: center;
+    background: #2f2f2f;
+    box-shadow: 0 1px 1px rgba(0, 0, 0, 1),
+        0 1px 1px rgba(255, 255, 255, 0.3),
+        0 1px 15px rgba(0, 0, 0, 0.25);
+    display: flex;
+    flex-flow: row;
+    justify-content: center;
+    left: 0;
+    min-width: 300px;
+    right: 0;
+    padding: 0.5rem 1rem;
+    position: relative;
+    top: 0;
+    z-index: 2;
+
+    .links {
+        flex: 0 1 auto;
+    }
+
+    .link {
+        background: transparent;
+        border-radius: 5px;
+        cursor: pointer;
+        color: #FFF;
+        display: inline-block;
+        padding: 10px 0.5rem;
+        text-decoration: none;
+        transition: all 0.2s ease-in-out;
+        vertical-align: middle;
+
+        &.active {
+            background: #F37521;
+        }
+        &.hover {
+            background: #000;
+        }
+
+        span {
+            display: inline-block;
+            vertical-align: middle;
+        }
+        span.icon {
+            background-position: center;
+            background-size: contain;
+            background-repeat: no-repeat;
+            content: '';
+            display: inline-block;
+            height: 28px;
+            vertical-align: middle;
+            width: 28px;
+        }
+        &.link-home span.icon {
+            background-image: url(../icons/home.svg);
+        }
+        &.link-explore span.icon {
+            background-image: url(../icons/explore.svg);
+        }
+        &.link-watchlist span.icon {
+            background-image: url(../icons/watchlist.svg);
+        }
+        &.link-history span.icon {
+            background-image: url(../icons/history.svg);
+        }
+        &.link-search span.icon {
+            background-image: url(../icons/search.svg);
+        }
+    }
+
+    .account {
+        align-items: center;
+        display: flex;
+        flex: 0 1 auto;
+        margin-left: 1rem;
+    }
+    .account-image img {
+        border-radius: 5px;
+        display: block;
+    }
+    .account-info {
+        margin-left: 10px;
+    }
+    .account-name {
+        font-size: 0.8rem;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        word-wrap: normal;
+        word-break: keep-all;
+    }
+    .account-logout a {
+        cursor: pointer;
+        display: block;
+        font-size: 0.8rem;
+        margin-top: 5px;
+        transition: all 0.2s ease-in-out;
+    }
+    .account-logout a.hover {
+        color: #F37521;
+    }
+
+}
+
+.mouse #menu .link:hover {
+    background: #000;
+}
+.mouse #menu .link.active:hover {
+    background: #F37521;
+}
+.mouse #menu .account-logout a:hover {
+    color: #F37521;
+}
+
+@media screen and (max-width: 860px) {
+
+    #menu .account .account-name {
+        display: none;
+    }
+    #menu .account .account-logout a {
+        margin-top: 0;
+    }
+
+}
+
+@media screen and (max-width: 680px) {
+
+    #menu .account .account-info {
+        display: none;
+    }
+    #menu .links .link span.label {
+        display: none;
+    }
+    #menu .link {
+        padding: 5px 0.25rem
+    }
+
+}
