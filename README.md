@@ -1,5 +1,7 @@
 # Crunchyroll - WebOS TV App
 
+**PERSONAL NOTE:** THIS IS A EDIT OF THE ALREADY EXISTING CRUNCHYROLL APP ON THE HB APP STORE TO FIX THE LOGIN ISSUES ASWELL AS PLAYBACK. THIS VERSION WILL hopefully FIX ALL OF THEM. THIS IS NOT A NEW APP. YOU WILL HAVE TO INSTALL NODE MODULES TO GET BUILDING AND COMPILING.
+
 **IMPORTANT NOTICE:** Crunchyroll now has a official app for WebOS TVs. We strongly recommend you to use the official app for better user experience.
 
 *Crunchyroll&trade; is a registered trademark of the Sony Pictures Entertainment Inc. This project is not affiliated with Crunchyroll, Team Crunchyroll, or the Sony Pictures Entertainment Inc.*
