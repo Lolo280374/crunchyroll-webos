@@ -21,7 +21,7 @@ You are more than welcome to contribute to this project! To make the development
 
 ```bash
 # Clone the repository
-git clone git@github.com:mateussouzaweb/crunchyroll-webos.git
+git clone git@github.com:Lolo280374/crunchyroll-webos.git
 cd crunchyroll-webos/
 
 # Build the container from Dockerfile
