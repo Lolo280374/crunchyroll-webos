@@ -196,10 +196,17 @@ const streamVideo: Callback = async ({ state }) => {
         playhead = 0
     }
 
-    const streamsResponse = await App.streams(videoId, {})
-    if( !streamsResponse.streams ){
-        throw Error('Streams not available for this episode.')
-    }
+const streamsResponse = await App.streams(videoId, {})
+    
+// Check if we have an error in the response
+if (streamsResponse.error) {
+    throw Error(`Stream API error: ${streamsResponse.errorMessage || 'Unknown error'}`);
+}
+    
+if (!streamsResponse || !streamsResponse.streams) {
+    console.error("Unexpected streams response:", JSON.stringify(streamsResponse));
+    throw Error('Streams not available for this episode.');
+}
 
     const streams = streamsResponse.streams.adaptive_hls || []
     const locale = localStorage.getItem('preferredContentSubtitleLanguage')
@@ -212,9 +219,12 @@ const streamVideo: Callback = async ({ state }) => {
         }
     })
 
-    if (!stream) {
-        throw Error('No streams to load.')
-    }
+if (!stream) {
+    throw Error('No stream available for this episode.');
+}
+
+// Print debug information about the stream URL
+console.log(`Selected stream URL: ${stream.substring(0, 100)}...`);
 
     const proxyUrl = document.body.dataset.proxyUrl
     const proxyEncode = document.body.dataset.proxyEncode
