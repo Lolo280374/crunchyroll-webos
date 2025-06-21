@@ -60,14 +60,43 @@ const request = async (method: string, endpoint: string, body: any, headers: Hea
         referrerPolicy: 'no-referrer' as ReferrerPolicy
     }
 
+       // ...existing code above remains the same...
     const result = await fetch(url, requestOptions)
 
     if( result.status === 204 ){
         return {} as Result
     }
 
-    const response = await result.json()
-    return response as Result
+    try {
+        // Try to parse as JSON
+        const response = await result.json()
+        return response as Result
+    } catch (error) {
+        // If JSON parsing fails, try to get the text content for debugging
+        try {
+            // We need to get a fresh response since .json() already consumed the body
+            const freshResult = await fetch(url, requestOptions)
+            const textContent = await freshResult.text()
+            
+            // Create a more helpful error that includes the response text
+            const errorMessage = `Failed to parse JSON response. Status: ${result.status}, Content: ${textContent.substring(0, 200)}...`
+            console.error(errorMessage)
+            
+            // Return an error object that won't break the app but will show the error
+            return { 
+                error: true, 
+                errorMessage: errorMessage,
+                statusCode: result.status
+            } as unknown as Result
+        } catch (secondError) {
+            // If even getting the text fails, return a generic error
+            return { 
+                error: true, 
+                errorMessage: `Failed to process response: ${error.message}`,
+                statusCode: result.status
+            } as unknown as Result
+        }
+    }
 }
 
 /**
