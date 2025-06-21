@@ -60,20 +60,14 @@ const request = async (method: string, endpoint: string, body: any, headers: Hea
         referrerPolicy: 'no-referrer' as ReferrerPolicy
     }
 
-    const result = await fetch(url, requestOptions);
+    const result = await fetch(url, requestOptions)
 
-    if (result.status === 204) {
-        return {} as Result;
-}
+    if( result.status === 204 ){
+        return {} as Result
+    }
 
-    const contentType = result.headers.get('content-type') || '';
-if (contentType.includes('application/json')) {
-    return await result.json() as Result;
-} else {
-    // This is likely an error page, m3u8, or something else
-    const text = await result.text();
-    // Optionally, log or handle the non-JSON response
-    throw new Error(`Unexpected response type: ${contentType}\nResponse: ${text.substring(0, 100)}`);
+    const response = await result.json()
+    return response as Result
 }
 
 /**
