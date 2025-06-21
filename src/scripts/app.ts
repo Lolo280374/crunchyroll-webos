@@ -2,6 +2,11 @@ import { $, Engine, fire } from "./vine"
 import { Api } from "./api"
 import type { Data } from "./api"
 
+// Set a common browser User-Agent
+const headers = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+};
+
 /**
  * Retrieve template as text
  * @param name

@@ -100,6 +100,12 @@ const loadEpisode: Callback = async ({ state }) => {
     const episodeId = state.episodeId;
     const episodeResponse = await App.episode(episodeId, {});
     
+// For testing - try a known working ID
+const testVideoId = "GG1U28242"; // Wind Breaker episode
+console.log("Testing with hardcoded ID:", testVideoId);
+const testResponse = await App.modernStreams(testVideoId);
+console.log("Test response:", testResponse.error ? "Error" : "Success");
+
     if (episodeResponse.error) {
         throw Error(`Episode info error: ${episodeResponse.errorMessage || 'Unknown error'}`);
     }
@@ -112,13 +118,18 @@ const loadEpisode: Callback = async ({ state }) => {
     const episodeNumber = episodeMetadata.episode_number || episodeMetadata.episode;
     const episodeName = episodeInfo.title;
 
+    // Log the entire episode response to find the right format
+    console.log("Full episode response:", JSON.stringify(episodeInfo));
+
     // Extract the new format videoId (looks like GG1U28242)
     let videoId = '';
     
-    // First check if we have versions data with GUIDs
-    if (episodeInfo.versions && episodeInfo.versions.length > 0) {
-        // Find the version matching the user's preferred language
+    // Check if the episode data has a 'versions' array
+    if (Array.isArray(episodeInfo.versions) && episodeInfo.versions.length > 0) {
+        // Get user's preferred audio language
         const preferredAudio = localStorage.getItem('preferredContentAudioLanguage');
+        
+        // Try to find a version matching the preferred language
         let matchedVersion = episodeInfo.versions.find(v => v.audio_locale === preferredAudio);
         
         // If no match for preferred language, use the first version
@@ -134,33 +145,27 @@ const loadEpisode: Callback = async ({ state }) => {
     
     // If we still don't have a videoId, try other sources
     if (!videoId) {
-        // Look for a guid or media_id in the episode info
         if (episodeInfo.guid) {
             videoId = episodeInfo.guid;
             console.log(`Using episode GUID as videoId: ${videoId}`);
         } else if (episodeInfo.media_id) {
             videoId = episodeInfo.media_id;
             console.log(`Using media_id as videoId: ${videoId}`);
+        } else if (episodeInfo.id && episodeInfo.id.includes('G')) {
+            // Some episodes have a G-prefixed ID directly in the id field
+            videoId = episodeInfo.id;
+            console.log(`Using episode.id as videoId: ${videoId}`);
         } else {
-            // Fallback to streams_link extraction
-            const streamsLink = String(episodeInfo.streams_link || '');
-            if (streamsLink) {
-                videoId = streamsLink.replace('/content/v2/cms/videos/', '')
-                                     .replace('/streams', '')
-                                     .replace('/videos/', '')
-                                     .trim();
-                console.log(`Extracted videoId from streams_link: ${videoId}`);
-            } else {
-                // Last resort: use the episode ID
-                videoId = episodeId;
-                console.log(`Using episodeId as videoId: ${videoId}`);
-            }
+            // Last resort - use the episodeId
+            videoId = episodeId;
+            console.log(`Using episodeId as videoId: ${videoId}`);
         }
     }
     
-    // Log the full episode data for debugging
-    console.log("Episode data structure:", JSON.stringify(episodeInfo));
-    console.log("Final videoId selected:", videoId);
+    // If the videoId doesn't start with G, it's probably not a valid GUID
+    if (videoId && !videoId.includes('G')) {
+        console.warn(`Warning: videoId ${videoId} doesn't look like a valid GUID (should start with G)`);
+    }
     
     state.videoId = videoId;
     
@@ -256,7 +261,10 @@ const streamVideo: Callback = async ({ state }) => {
         console.log("Attempting to use modern streaming API...");
         const modernResponse = await App.modernStreams(videoId);
         
-        console.log("Modern API response:", JSON.stringify(modernResponse).substring(0, 500) + "...");
+        console.log("Modern API response status:", modernResponse.statusCode || "unknown");
+        if (modernResponse.error) {
+     console.error("Modern API error details:", modernResponse.errorMessage || "No details available");
+}
         
         if (!modernResponse.error && modernResponse.url) {
             console.log("Modern streaming API successful!");
