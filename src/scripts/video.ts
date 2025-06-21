@@ -243,6 +243,8 @@ const streamVideo: Callback = async ({ state }) => {
     const episodeId = state.episodeId
     const videoId = state.videoId
 
+console.log("DASH.js available:", typeof window.dashjs !== 'undefined');
+
     // Get playhead info as before
     const playheadResponse = await App.playHeads([episodeId], {})
     let playhead = 0
