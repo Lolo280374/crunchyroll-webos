@@ -257,34 +257,30 @@ const streamVideo: Callback = async ({ state }) => {
     }
 
     // Always try the modern API first
-        try {
+    try {
         console.log("Attempting to use modern streaming API...");
         const modernResponse = await App.modernStreams(videoId);
         
-        if (!modernResponse.error) {
+        console.log("Modern API response status:", modernResponse.statusCode || "unknown");
+        if (modernResponse.error) {
+     console.error("Modern API error details:", modernResponse.errorMessage || "No details available");
+}
+        
+        if (!modernResponse.error && modernResponse.url) {
             console.log("Modern streaming API successful!");
-            console.log("Response:", JSON.stringify(modernResponse).substring(0, 500) + "...");
             
-            let stream = '';
-            const locale = localStorage.getItem('preferredContentSubtitleLanguage');
+            // Use the main URL from the response
+            let stream = modernResponse.url;
             
             // Check if we have hardSubs in the preferred language
+            const locale = localStorage.getItem('preferredContentSubtitleLanguage');
             if (modernResponse.hardSubs && modernResponse.hardSubs[locale] && modernResponse.hardSubs[locale].url) {
                 stream = modernResponse.hardSubs[locale].url;
                 console.log(`Using hardsub URL for locale ${locale}`);
-            } else if (modernResponse.url) {
-                // Otherwise use the main URL
-                stream = modernResponse.url;
-                console.log("Using main URL");
-            } else {
-                throw Error("No valid stream URL in the response");
             }
+
+            console.log(`Stream URL (first 100 chars): ${stream.substring(0, 100)}...`);
             
-            // Important: The stream URL already contains the token information!
-            // We don't need to modify it further
-            console.log(`Stream URL: ${stream.substring(0, 100)}...`);
-            
-            // Add proxy only if needed (manifest files already have authentication)
             const proxyUrl = document.body.dataset.proxyUrl;
             const proxyEncode = document.body.dataset.proxyEncode;
             if (proxyUrl) {

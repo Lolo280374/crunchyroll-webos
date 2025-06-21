@@ -5,20 +5,6 @@
     (global = typeof globalThis !== 'undefined' ? globalThis : global || self, global.Hls = factory());
   })(this, (function () { 'use strict';
   
-hls = new Hls({
-    autoStartLoad: false,
-    startLevel: -1,
-    maxBufferLength: 15,
-    backBufferLength: 15,
-    maxBufferSize: 30 * 1000 * 1000,
-    maxFragLookUpTolerance: 0.2,
-    nudgeMaxRetry: 10,
-    xhrSetup: function(xhr, url) {
-        // This ensures that each segment request includes credentials
-        xhr.withCredentials = true;
-    }
-});
-
     function ownKeys(e, r) {
       var t = Object.keys(e);
       if (Object.getOwnPropertySymbols) {
