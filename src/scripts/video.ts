@@ -238,49 +238,55 @@ const loadClosestEpisodes: Callback = async ({ state }) => {
  */
 
 const streamVideo: Callback = async ({ state }) => {
-    const episodeId = state.episodeId;
-    const videoId = state.videoId;
+    const episodeId = state.episodeId
+    const videoId = state.videoId
 
-    console.log(`Starting streamVideo with episodeId: ${episodeId}, videoId: ${videoId}`);
+    // Get playhead info as before
+    const playheadResponse = await App.playHeads([episodeId], {})
+    let playhead = 0
+    let duration = 0
 
-    const playheadResponse = await App.playHeads([episodeId], {});
-    let playhead = 0;
-    let duration = 0;
-
-    if (playheadResponse && playheadResponse.data && playheadResponse.data.length) {
-        playhead = playheadResponse.data[0].playhead;
-        duration = playheadResponse.data[0].duration;
+    if( playheadResponse && playheadResponse.data && playheadResponse.data.length ){
+        playhead = playheadResponse.data[0].playhead
+        duration = playheadResponse.data[0].duration
     }
 
     if (playhead / duration > 0.90 || playhead < 30) {
-        playhead = 0;
+        playhead = 0
     }
 
-    // Always try the modern API first
     try {
         console.log("Attempting to use modern streaming API...");
+        
+        // Get the current access token to use in all requests
+        const accessToken = localStorage.getItem('accessToken');
+        console.log("Using access token:", accessToken ? "Present" : "Missing");
+        
+        // Get stream info from the modern API
         const modernResponse = await App.modernStreams(videoId);
         
-        console.log("Modern API response status:", modernResponse.statusCode || "unknown");
-        if (modernResponse.error) {
-     console.error("Modern API error details:", modernResponse.errorMessage || "No details available");
-}
-        
-        if (!modernResponse.error && modernResponse.url) {
+        if (!modernResponse.error && (modernResponse.url || (modernResponse.hardSubs && Object.keys(modernResponse.hardSubs).length))) {
             console.log("Modern streaming API successful!");
             
-            // Use the main URL from the response
-            let stream = modernResponse.url;
+            // Choose the appropriate stream URL
+            let stream = '';
+            const locale = localStorage.getItem('preferredContentSubtitleLanguage');
             
             // Check if we have hardSubs in the preferred language
-            const locale = localStorage.getItem('preferredContentSubtitleLanguage');
-            if (modernResponse.hardSubs && modernResponse.hardSubs[locale] && modernResponse.hardSubs[locale].url) {
+            if (modernResponse.hardSubs && modernResponse.hardSubs[locale]) {
                 stream = modernResponse.hardSubs[locale].url;
                 console.log(`Using hardsub URL for locale ${locale}`);
+            } else if (modernResponse.url) {
+                // Otherwise use the main URL
+                stream = modernResponse.url;
+                console.log("Using main URL");
             }
 
-            console.log(`Stream URL (first 100 chars): ${stream.substring(0, 100)}...`);
+            if (!stream) {
+                throw Error('No streams to load.');
+            }
             
+            // Handle proxy if needed
             const proxyUrl = document.body.dataset.proxyUrl;
             const proxyEncode = document.body.dataset.proxyEncode;
             if (proxyUrl) {
@@ -289,13 +295,12 @@ const streamVideo: Callback = async ({ state }) => {
 
             area.classList.add('video-is-loading');
 
-            // Rest of HLS setup
             return await new Promise((resolve) => {
-                // HLS code remains the same
                 if (!Hls.isSupported()) {
                     throw Error('Video format not supported.');
                 }
 
+                // Configure HLS.js with the crucial xhrSetup function
                 hls = new Hls({
                     autoStartLoad: false,
                     startLevel: -1,
@@ -303,9 +308,16 @@ const streamVideo: Callback = async ({ state }) => {
                     backBufferLength: 15,
                     maxBufferSize: 30 * 1000 * 1000,
                     maxFragLookUpTolerance: 0.2,
-                    nudgeMaxRetry: 10
+                    nudgeMaxRetry: 10,
+                    // THIS IS THE KEY PART - Add the Authorization header to all HLS requests
+                    xhrSetup: function(xhr, url) {
+                        // Add Authorization header to all requests
+                        xhr.setRequestHeader('Authorization', 'Bearer ' + accessToken);
+                        console.log("Added Authorization header to HLS request");
+                    }
                 });
 
+                // Rest of your HLS setup remains the same
                 hls.on(Hls.Events.MEDIA_ATTACHED, () => {
                     hls.loadSource(stream);
                 });
@@ -337,6 +349,9 @@ const streamVideo: Callback = async ({ state }) => {
                 });
 
                 hls.on(Hls.Events.ERROR, (_event: Event, data: any) => {
+                    // Log more details about HLS errors
+                    console.error("HLS error:", data);
+                    
                     if (!data.fatal) {
                         return;
                     }
@@ -347,7 +362,7 @@ const streamVideo: Callback = async ({ state }) => {
                             break;
                         case Hls.ErrorTypes.NETWORK_ERROR:
                             if (data.details == 'manifestLoadError') {
-                                showError('Episode cannot be played because of CORS error. You must use a proxy.');
+                                showError('Episode cannot be played because of CORS error or invalid token. Error details: ' + data.response?.code);
                             } else {
                                 hls.startLoad();
                             }
@@ -365,18 +380,16 @@ const streamVideo: Callback = async ({ state }) => {
 
                 hls.attachMedia(video);
             });
-        } else if (modernResponse.error) {
-            console.error(`Modern API error: ${modernResponse.errorMessage || 'Unknown error'}`);
         } else {
-            console.error("Modern API response missing URL field");
+            // If modern API fails, fall back to legacy method
+            console.log("Modern API didn't return valid stream info, falling back to legacy API");
+            throw new Error("Modern API failed");
         }
-    } catch (error) {
-        console.error("Modern API failed:", error);
-    }
+    } catch (modernError) {
+        // Fall back to legacy streaming method
+        console.error("Modern streaming failed:", modernError);
+        console.log("Falling back to legacy streaming API...");
 
-    // If we get here, the modern API failed - try the legacy API as fallback
-    console.log("Falling back to legacy streaming API...");
-    
     try {
         const streamsResponse = await App.streams(videoId, {});
         
@@ -496,6 +509,7 @@ const streamVideo: Callback = async ({ state }) => {
         console.error("Legacy API failed:", error);
         throw error; // Re-throw to show error to user
     }
+}
 }
 
 /**
