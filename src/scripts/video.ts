@@ -286,6 +286,13 @@ const streamVideo: Callback = async ({ state }) => {
                 throw Error('No streams to load.');
             }
             
+// NEW CODE: Convert DASH (MPD) URL to HLS (M3U8) URL
+if (stream.includes('.urlset/manifest.mpd')) {
+    console.log("Detected DASH stream, converting to HLS format");
+    stream = stream.replace('.urlset/manifest.mpd', '.m3u8');
+    console.log(`Converted to HLS stream: ${stream.substring(0, 100)}...`);
+}
+        
             // Handle proxy if needed
             const proxyUrl = document.body.dataset.proxyUrl;
             const proxyEncode = document.body.dataset.proxyEncode;
