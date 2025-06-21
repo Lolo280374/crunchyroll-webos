@@ -15,6 +15,18 @@ const getTemplate = async (name: string, data: any) => {
 }
 
 /**
+ * Retrieve modern streams for playback
+ * @param contentId 
+ * @returns 
+ */
+const modernStreams = async (contentId: string) => {
+    await refreshSession();
+    const accessToken = localStorage.getItem('accessToken');
+    
+    return Api.modernStreams(accessToken, contentId);
+}
+
+/**
  * Retrieve image information
  * @param images
  * @returns
@@ -775,6 +787,7 @@ export const App = {
     getImage,
     formatError,
     login,
+    modernStreams,
     logout,
     isLoggedIn,
     refreshSession,

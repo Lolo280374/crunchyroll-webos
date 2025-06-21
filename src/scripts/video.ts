@@ -95,35 +95,84 @@ const hideVideo = () => {
  * Load episode
  * @param component
  */
+
 const loadEpisode: Callback = async ({ state }) => {
+    const episodeId = state.episodeId;
+    const episodeResponse = await App.episode(episodeId, {});
+    
+    if (episodeResponse.error) {
+        throw Error(`Episode info error: ${episodeResponse.errorMessage || 'Unknown error'}`);
+    }
+    
+    const episodeInfo = episodeResponse.data[0];
+    const episodeMetadata = episodeInfo.episode_metadata;
 
-    const episodeId = state.episodeId
-    const episodeResponse = await App.episode(episodeId, {})
-    const episodeInfo = episodeResponse.data[0]
-    const episodeMetadata = episodeInfo.episode_metadata
+    const serieName = episodeMetadata.series_title;
+    const seasonNumber = episodeMetadata.season_number;
+    const episodeNumber = episodeMetadata.episode_number || episodeMetadata.episode;
+    const episodeName = episodeInfo.title;
 
-    const serieName = episodeMetadata.series_title
-    const seasonNumber = episodeMetadata.season_number
-    const episodeNumber = episodeMetadata.episode_number || episodeMetadata.episode
-    const episodeName = episodeInfo.title
+    // Extract the new format videoId (looks like GG1U28242)
+    let videoId = '';
+    
+    // First check if we have versions data with GUIDs
+    if (episodeInfo.versions && episodeInfo.versions.length > 0) {
+        // Find the version matching the user's preferred language
+        const preferredAudio = localStorage.getItem('preferredContentAudioLanguage');
+        let matchedVersion = episodeInfo.versions.find(v => v.audio_locale === preferredAudio);
+        
+        // If no match for preferred language, use the first version
+        if (!matchedVersion && episodeInfo.versions.length > 0) {
+            matchedVersion = episodeInfo.versions[0];
+        }
+        
+        if (matchedVersion && matchedVersion.guid) {
+            videoId = matchedVersion.guid;
+            console.log(`Using version GUID as videoId: ${videoId}`);
+        }
+    }
+    
+    // If we still don't have a videoId, try other sources
+    if (!videoId) {
+        // Look for a guid or media_id in the episode info
+        if (episodeInfo.guid) {
+            videoId = episodeInfo.guid;
+            console.log(`Using episode GUID as videoId: ${videoId}`);
+        } else if (episodeInfo.media_id) {
+            videoId = episodeInfo.media_id;
+            console.log(`Using media_id as videoId: ${videoId}`);
+        } else {
+            // Fallback to streams_link extraction
+            const streamsLink = String(episodeInfo.streams_link || '');
+            if (streamsLink) {
+                videoId = streamsLink.replace('/content/v2/cms/videos/', '')
+                                     .replace('/streams', '')
+                                     .replace('/videos/', '')
+                                     .trim();
+                console.log(`Extracted videoId from streams_link: ${videoId}`);
+            } else {
+                // Last resort: use the episode ID
+                videoId = episodeId;
+                console.log(`Using episodeId as videoId: ${videoId}`);
+            }
+        }
+    }
+    
+    state.videoId = videoId;
+    
+    // Rest of the function remains unchanged
+    const serie = $('.video-serie', area);
+    serie.innerHTML = serieName + ' / S' + seasonNumber + ' / E' + episodeNumber;
 
-    const streamsLink = String(episodeInfo.streams_link)
-    const videoId = streamsLink.replace('/content/v2/cms/videos/', '').replace('/streams', '')
-    state.videoId = videoId
+    const title = $('.video-title', area);
+    title.innerHTML = episodeName;
 
-    const serie = $('.video-serie', area)
-    serie.innerHTML = serieName + ' / S' + seasonNumber + ' / E' + episodeNumber
+    const serieId = state.serieId;
+    const seasonId = state.seasonId;
+    const episodesUrl = '/serie/' + serieId + '/season/' + seasonId;
 
-    const title = $('.video-title', area)
-    title.innerHTML = episodeName
-
-    const serieId = state.serieId
-    const seasonId = state.seasonId
-    const episodesUrl = '/serie/' + serieId + '/season/' + seasonId
-
-    const episodes = $('.video-episodes', area)
-    episodes.dataset.url = episodesUrl
-
+    const episodes = $('.video-episodes', area);
+    episodes.dataset.url = episodesUrl;
 }
 
 /**
@@ -187,7 +236,7 @@ const streamVideo: Callback = async ({ state }) => {
     let playhead = 0
     let duration = 0
 
-    if( playheadResponse && playheadResponse.data && playheadResponse.data.length ){
+    if(playheadResponse && playheadResponse.data && playheadResponse.data.length){
         playhead = playheadResponse.data[0].playhead
         duration = playheadResponse.data[0].duration
     }
@@ -196,9 +245,125 @@ const streamVideo: Callback = async ({ state }) => {
         playhead = 0
     }
 
+    // Try the modern API first
+    try {
+        console.log("Attempting to use modern streaming API...");
+        const modernResponse = await App.modernStreams(videoId);
+        
+        if (!modernResponse.error && modernResponse.url) {
+            console.log("Modern streaming API successful!");
+            
+            // Use the main URL or the hardSub URL based on user language preference
+            const locale = localStorage.getItem('preferredContentSubtitleLanguage');
+            let stream = modernResponse.url;
+            
+            // Check if we have hardSubs in the preferred language
+            if (modernResponse.hardSubs && modernResponse.hardSubs[locale]) {
+                stream = modernResponse.hardSubs[locale].url;
+                console.log(`Using hardsub URL for locale ${locale}`);
+            }
+            
+            const proxyUrl = document.body.dataset.proxyUrl
+            const proxyEncode = document.body.dataset.proxyEncode
+            if (proxyUrl) {
+                stream = proxyUrl + (proxyEncode === "true" ? encodeURIComponent(stream) : stream)
+            }
+
+            area.classList.add('video-is-loading');
+
+            return await new Promise((resolve) => {
+                if (!Hls.isSupported()) {
+                    throw Error('Video format not supported.');
+                }
+
+                hls = new Hls({
+                    autoStartLoad: false,
+                    startLevel: -1,
+                    maxBufferLength: 15,
+                    backBufferLength: 15,
+                    maxBufferSize: 30 * 1000 * 1000,
+                    maxFragLookUpTolerance: 0.2,
+                    nudgeMaxRetry: 10
+                });
+
+                hls.on(Hls.Events.MEDIA_ATTACHED, () => {
+                    hls.loadSource(stream);
+                });
+
+                hls.on(Hls.Events.MANIFEST_PARSED, () => {
+                    hls.startLoad(playhead);
+                });
+
+                hls.on(Hls.Events.LEVEL_LOADED, () => {
+                    area.classList.remove('video-is-loading');
+                    area.classList.add('video-is-loaded');
+                });
+
+                hls.on(Hls.Events.LEVEL_SWITCHED, () => {
+                    let quality = $('.video-quality', area);
+                    let level = hls.levels[hls.currentLevel];
+                    let next = hls.currentLevel - 1;
+
+                    if (next < -1) {
+                        next = hls.levels[hls.levels.length - 1];
+                    }
+
+                    quality.dataset.next = next;
+                    $('span', quality).innerText = level.height + 'p';
+                });
+
+                hls.once(Hls.Events.FRAG_LOADED, () => {
+                    resolve(null);
+                });
+
+                hls.on(Hls.Events.ERROR, (_event: Event, data: any) => {
+                    if (!data.fatal) {
+                        return;
+                    }
+
+                    switch (data.type) {
+                        case Hls.ErrorTypes.OTHER_ERROR:
+                            hls.startLoad();
+                            break;
+                        case Hls.ErrorTypes.NETWORK_ERROR:
+                            if (data.details == 'manifestLoadError') {
+                                showError('Episode cannot be played because of CORS error. You must use a proxy.');
+                            } else {
+                                hls.startLoad();
+                            }
+                            break;
+                        case Hls.ErrorTypes.MEDIA_ERROR:
+                            showError('Media error: trying recovery...');
+                            hls.recoverMediaError();
+                            break;
+                        default:
+                            showError('Media cannot be recovered: ' + data.details);
+                            hls.destroy();
+                            break;
+                    }
+                });
+
+                hls.attachMedia(video);
+            });
+        }
+    } catch (error) {
+        console.error("Modern API failed:", error);
+        // We'll fall back to the old API method
+    }
+
+    // If we get here, the modern API failed - try the old API as fallback
+    console.log("Falling back to legacy streaming API...");
+    
     const streamsResponse = await App.streams(videoId, {})
-    if( !streamsResponse.streams ){
-        throw Error('Streams not available for this episode.')
+    
+    // Check if we have an error in the response
+    if (streamsResponse.error) {
+        throw Error(`Stream API error: ${streamsResponse.errorMessage || 'Unknown error'}`);
+    }
+    
+    if (!streamsResponse || !streamsResponse.streams) {
+        console.error("Unexpected streams response:", JSON.stringify(streamsResponse));
+        throw Error('Streams not available for this episode.');
     }
 
     const streams = streamsResponse.streams.adaptive_hls || []
@@ -207,7 +372,7 @@ const streamVideo: Callback = async ({ state }) => {
 
     let stream = ''
     priorities.forEach((locale) => {
-        if( streams[locale] && !stream ){
+        if(streams[locale] && !stream){
             stream = streams[locale].url
         }
     })
@@ -215,6 +380,9 @@ const streamVideo: Callback = async ({ state }) => {
     if (!stream) {
         throw Error('No streams to load.')
     }
+
+    // Print debug information about the stream URL
+    console.log(`Selected stream URL: ${stream.substring(0, 100)}...`);
 
     const proxyUrl = document.body.dataset.proxyUrl
     const proxyEncode = document.body.dataset.proxyEncode

@@ -258,6 +258,20 @@ const search = async (accessToken: string, filters: Data) => {
     return result
 }
 
+const modernStreams = async (accessToken: string, contentId: string) => {
+    const headers = {
+        'Authorization': 'Bearer ' + accessToken,
+        'Content-Type': 'application/json'
+    }
+
+    console.log(`Using modern streaming API for contentId: ${contentId}`);
+    
+    const endpoint = `https://cr-play-service.prd.crunchyrollsvc.com/v1/${contentId}/web/firefox/play`;
+    const result = await request('GET', endpoint, null, headers);
+    
+    return result;
+}
+
 /**
  * Retrieve recommendations results. Possible filter parameters:
  *
@@ -745,6 +759,7 @@ export type {
 }
 
 export const Api = {
+    modernStreams,
     encode,
     request,
     makeLogin,
