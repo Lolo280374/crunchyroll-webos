@@ -745,11 +745,6 @@ const avatar = (reference: string, size: number) => {
     return endpoint
 }
 
-export type {
-    Data,
-    Result,
-}
-
 export const Api = {
     encode,
     request,
