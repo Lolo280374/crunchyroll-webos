@@ -1,15 +1,17 @@
 {
-  "compilerOptions": {
-    "baseUrl": "./src/",
-    "isolatedModules": true,
-    "module": "ESNext",
-    "target": "ES2018",
-    "lib": [ "ES2018", "DOM" ],
-    "outDir": "dist/scripts"
-  },
-  "exclude": [
-    "node_modules",
-    "com.crunchyroll.webos",
-    "dist"
-  ]
+    "compilerOptions": {
+        "baseUrl": "./src/",
+        "isolatedModules": true,
+        "module": "ESNext",
+        "target": "ES2018",
+        "lib": [
+            "ES2018",
+            "DOM"
+        ]
+    },
+    "exclude": [
+        "node_modules",
+        "com.crunchyroll.webos",
+        "dist"
+    ]
 }
