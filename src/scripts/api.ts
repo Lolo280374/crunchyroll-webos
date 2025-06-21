@@ -57,6 +57,7 @@ const request = async (method: string, endpoint: string, body: any, headers: Hea
         method: method,
         headers: headers,
         body: body,
+        credentials: 'include', // Include credentials (cookies) 
         referrerPolicy: 'no-referrer' as ReferrerPolicy
     }
 
@@ -295,27 +296,8 @@ const modernStreams = async (accessToken: string, contentId: string) => {
 
     console.log(`Using modern streaming API for contentId: ${contentId}`);
     
-    // If contentId doesn't start with 'G', it's probably not a valid GUID format
-    // This check helps avoid unnecessary 404 errors
-    if (!contentId || !contentId.includes('G')) {
-        console.error("Invalid contentId format for modern API:", contentId);
-        return { error: true, errorMessage: "Invalid contentId format for modern API" };
-    }
-    
-    // Try a few different URL formats if necessary
-    const endpoints = [
-        `https://cr-play-service.prd.crunchyrollsvc.com/v1/${contentId}/web/firefox/play`,
-        `https://cr-play-service.prd.crunchyrollsvc.com/v1/${contentId}/web/chrome/play`
-    ];
-    
-    // Try the first endpoint by default
-    let result = await request('GET', endpoints[0], null, headers);
-    
-    // If first endpoint fails, try the chrome endpoint
-    if (result.error) {
-        console.log("Firefox endpoint failed, trying Chrome endpoint...");
-        result = await request('GET', endpoints[1], null, headers);
-    }
+    const endpoint = `https://cr-play-service.prd.crunchyrollsvc.com/v1/${contentId}/web/firefox/play`;
+    const result = await request('GET', endpoint, null, headers);
     
     return result;
 }
