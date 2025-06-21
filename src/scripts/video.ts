@@ -158,6 +158,10 @@ const loadEpisode: Callback = async ({ state }) => {
         }
     }
     
+    // Log the full episode data for debugging
+    console.log("Episode data structure:", JSON.stringify(episodeInfo));
+    console.log("Final videoId selected:", videoId);
+    
     state.videoId = videoId;
     
     // Rest of the function remains unchanged
@@ -227,132 +231,263 @@ const loadClosestEpisodes: Callback = async ({ state }) => {
  * Stream video
  * @param component
  */
+
 const streamVideo: Callback = async ({ state }) => {
+    const episodeId = state.episodeId;
+    const videoId = state.videoId;
 
-    const episodeId = state.episodeId
-    const videoId = state.videoId
+    console.log(`Starting streamVideo with episodeId: ${episodeId}, videoId: ${videoId}`);
 
-    const playheadResponse = await App.playHeads([episodeId], {})
-    let playhead = 0
-    let duration = 0
+    const playheadResponse = await App.playHeads([episodeId], {});
+    let playhead = 0;
+    let duration = 0;
 
-    if(playheadResponse && playheadResponse.data && playheadResponse.data.length){
-        playhead = playheadResponse.data[0].playhead
-        duration = playheadResponse.data[0].duration
+    if (playheadResponse && playheadResponse.data && playheadResponse.data.length) {
+        playhead = playheadResponse.data[0].playhead;
+        duration = playheadResponse.data[0].duration;
     }
 
     if (playhead / duration > 0.90 || playhead < 30) {
-        playhead = 0
+        playhead = 0;
     }
 
-    const streamsResponse = await App.streams(videoId, {})
-    if( !streamsResponse.streams ){
-        throw Error('Streams not available for this episode.')
-    }
-
-    const streams = streamsResponse.streams.adaptive_hls || []
-    const locale = localStorage.getItem('preferredContentSubtitleLanguage')
-    const priorities = [locale, '']
-
-    let stream = ''
-    priorities.forEach((locale) => {
-        if(streams[locale] && !stream){
-            stream = streams[locale].url
-        }
-    })
-
-    if (!stream) {
-        throw Error('No streams to load.')
-    }
-
-    const proxyUrl = document.body.dataset.proxyUrl
-    const proxyEncode = document.body.dataset.proxyEncode
-    if (proxyUrl) {
-        stream = proxyUrl + (proxyEncode === "true" ? encodeURIComponent(stream) : stream)
-    }
-
-    area.classList.add('video-is-loading')
-
-    return await new Promise((resolve) => {
-
-        if (!Hls.isSupported()) {
-            throw Error('Video format not supported.')
-        }
-
-        hls = new Hls({
-            autoStartLoad: false,
-            startLevel: -1, // auto
-            maxBufferLength: 15, // 15s
-            backBufferLength: 15, // 15s
-            maxBufferSize: 30 * 1000 * 1000, // 30MB
-            maxFragLookUpTolerance: 0.2,
-            nudgeMaxRetry: 10
-        })
-
-        hls.on(Hls.Events.MEDIA_ATTACHED, () => {
-            hls.loadSource(stream)
-        })
-
-        hls.on(Hls.Events.MANIFEST_PARSED, () => {
-            hls.startLoad(playhead)
-        })
-
-        hls.on(Hls.Events.LEVEL_LOADED, () => {
-            area.classList.remove('video-is-loading')
-            area.classList.add('video-is-loaded')
-        })
-
-        hls.on(Hls.Events.LEVEL_SWITCHED, () => {
-
-            let quality = $('.video-quality', area)
-            let level = hls.levels[hls.currentLevel]
-            let next = hls.currentLevel - 1
-
-            if (next < -1) {
-                next = hls.levels[hls.levels.length - 1]
+    // Always try the modern API first
+    try {
+        console.log("Attempting to use modern streaming API...");
+        const modernResponse = await App.modernStreams(videoId);
+        
+        console.log("Modern API response:", JSON.stringify(modernResponse).substring(0, 500) + "...");
+        
+        if (!modernResponse.error && modernResponse.url) {
+            console.log("Modern streaming API successful!");
+            
+            // Use the main URL from the response
+            let stream = modernResponse.url;
+            
+            // Check if we have hardSubs in the preferred language
+            const locale = localStorage.getItem('preferredContentSubtitleLanguage');
+            if (modernResponse.hardSubs && modernResponse.hardSubs[locale] && modernResponse.hardSubs[locale].url) {
+                stream = modernResponse.hardSubs[locale].url;
+                console.log(`Using hardsub URL for locale ${locale}`);
             }
 
-            quality.dataset.next = next
-            $('span', quality).innerText = level.height + 'p'
-
-        })
-
-        hls.once(Hls.Events.FRAG_LOADED, () => {
-            resolve(null)
-        })
-
-        hls.on(Hls.Events.ERROR, (_event: Event, data: any) => {
-
-            if (!data.fatal) {
-                return
+            console.log(`Stream URL (first 100 chars): ${stream.substring(0, 100)}...`);
+            
+            const proxyUrl = document.body.dataset.proxyUrl;
+            const proxyEncode = document.body.dataset.proxyEncode;
+            if (proxyUrl) {
+                stream = proxyUrl + (proxyEncode === "true" ? encodeURIComponent(stream) : stream);
             }
 
-            switch (data.type) {
-                case Hls.ErrorTypes.OTHER_ERROR:
-                    hls.startLoad()
-                    break
-                case Hls.ErrorTypes.NETWORK_ERROR:
-                    if (data.details == 'manifestLoadError') {
-                        showError('Episode cannot be played because of CORS error. You must use a proxy.')
-                    } else {
-                        hls.startLoad()
+            area.classList.add('video-is-loading');
+
+            // Rest of HLS setup
+            return await new Promise((resolve) => {
+                // HLS code remains the same
+                if (!Hls.isSupported()) {
+                    throw Error('Video format not supported.');
+                }
+
+                hls = new Hls({
+                    autoStartLoad: false,
+                    startLevel: -1,
+                    maxBufferLength: 15,
+                    backBufferLength: 15,
+                    maxBufferSize: 30 * 1000 * 1000,
+                    maxFragLookUpTolerance: 0.2,
+                    nudgeMaxRetry: 10
+                });
+
+                hls.on(Hls.Events.MEDIA_ATTACHED, () => {
+                    hls.loadSource(stream);
+                });
+
+                hls.on(Hls.Events.MANIFEST_PARSED, () => {
+                    hls.startLoad(playhead);
+                });
+
+                hls.on(Hls.Events.LEVEL_LOADED, () => {
+                    area.classList.remove('video-is-loading');
+                    area.classList.add('video-is-loaded');
+                });
+
+                hls.on(Hls.Events.LEVEL_SWITCHED, () => {
+                    let quality = $('.video-quality', area);
+                    let level = hls.levels[hls.currentLevel];
+                    let next = hls.currentLevel - 1;
+
+                    if (next < -1) {
+                        next = hls.levels[hls.levels.length - 1];
                     }
-                    break
-                case Hls.ErrorTypes.MEDIA_ERROR:
-                    showError('Media error: trying recovery...')
-                    hls.recoverMediaError()
-                    break
-                default:
-                    showError('Media cannot be recovered: ' + data.details)
-                    hls.destroy()
-                    break
+
+                    quality.dataset.next = next;
+                    $('span', quality).innerText = level.height + 'p';
+                });
+
+                hls.once(Hls.Events.FRAG_LOADED, () => {
+                    resolve(null);
+                });
+
+                hls.on(Hls.Events.ERROR, (_event: Event, data: any) => {
+                    if (!data.fatal) {
+                        return;
+                    }
+
+                    switch (data.type) {
+                        case Hls.ErrorTypes.OTHER_ERROR:
+                            hls.startLoad();
+                            break;
+                        case Hls.ErrorTypes.NETWORK_ERROR:
+                            if (data.details == 'manifestLoadError') {
+                                showError('Episode cannot be played because of CORS error. You must use a proxy.');
+                            } else {
+                                hls.startLoad();
+                            }
+                            break;
+                        case Hls.ErrorTypes.MEDIA_ERROR:
+                            showError('Media error: trying recovery...');
+                            hls.recoverMediaError();
+                            break;
+                        default:
+                            showError('Media cannot be recovered: ' + data.details);
+                            hls.destroy();
+                            break;
+                    }
+                });
+
+                hls.attachMedia(video);
+            });
+        } else if (modernResponse.error) {
+            console.error(`Modern API error: ${modernResponse.errorMessage || 'Unknown error'}`);
+        } else {
+            console.error("Modern API response missing URL field");
+        }
+    } catch (error) {
+        console.error("Modern API failed:", error);
+    }
+
+    // If we get here, the modern API failed - try the legacy API as fallback
+    console.log("Falling back to legacy streaming API...");
+    
+    try {
+        const streamsResponse = await App.streams(videoId, {});
+        
+        console.log("Legacy API response:", JSON.stringify(streamsResponse).substring(0, 500) + "...");
+        
+        if (streamsResponse.error) {
+            throw Error(`Stream API error: ${streamsResponse.errorMessage || 'Unknown error'}`);
+        }
+        
+        if (!streamsResponse || !streamsResponse.streams) {
+            throw Error('Streams not available for this episode.');
+        }
+
+        const streams = streamsResponse.streams.adaptive_hls || [];
+        const locale = localStorage.getItem('preferredContentSubtitleLanguage');
+        const priorities = [locale, ''];
+
+        let stream = '';
+        priorities.forEach((locale) => {
+            if (streams[locale] && !stream) {
+                stream = streams[locale].url;
+            }
+        });
+
+        if (!stream) {
+            throw Error('No streams to load.');
+        }
+
+        // Rest of the legacy streaming code remains the same
+        // Legacy streaming setup
+        console.log(`Legacy stream URL (first 100 chars): ${stream.substring(0, 100)}...`);
+        
+        const proxyUrl = document.body.dataset.proxyUrl;
+        const proxyEncode = document.body.dataset.proxyEncode;
+        if (proxyUrl) {
+            stream = proxyUrl + (proxyEncode === "true" ? encodeURIComponent(stream) : stream);
+        }
+
+        area.classList.add('video-is-loading');
+
+        return await new Promise((resolve) => {
+            // Same HLS setup as before
+            if (!Hls.isSupported()) {
+                throw Error('Video format not supported.');
             }
 
-        })
+            hls = new Hls({
+                autoStartLoad: false,
+                startLevel: -1,
+                maxBufferLength: 15,
+                backBufferLength: 15,
+                maxBufferSize: 30 * 1000 * 1000,
+                maxFragLookUpTolerance: 0.2,
+                nudgeMaxRetry: 10
+            });
 
-        hls.attachMedia(video)
+            hls.on(Hls.Events.MEDIA_ATTACHED, () => {
+                hls.loadSource(stream);
+            });
 
-    })
+            hls.on(Hls.Events.MANIFEST_PARSED, () => {
+                hls.startLoad(playhead);
+            });
+
+            hls.on(Hls.Events.LEVEL_LOADED, () => {
+                area.classList.remove('video-is-loading');
+                area.classList.add('video-is-loaded');
+            });
+
+            hls.on(Hls.Events.LEVEL_SWITCHED, () => {
+                let quality = $('.video-quality', area);
+                let level = hls.levels[hls.currentLevel];
+                let next = hls.currentLevel - 1;
+
+                if (next < -1) {
+                    next = hls.levels[hls.levels.length - 1];
+                }
+
+                quality.dataset.next = next;
+                $('span', quality).innerText = level.height + 'p';
+            });
+
+            hls.once(Hls.Events.FRAG_LOADED, () => {
+                resolve(null);
+            });
+
+            hls.on(Hls.Events.ERROR, (_event: Event, data: any) => {
+                if (!data.fatal) {
+                    return;
+                }
+
+                switch (data.type) {
+                    case Hls.ErrorTypes.OTHER_ERROR:
+                        hls.startLoad();
+                        break;
+                    case Hls.ErrorTypes.NETWORK_ERROR:
+                        if (data.details == 'manifestLoadError') {
+                            showError('Episode cannot be played because of CORS error. You must use a proxy.');
+                        } else {
+                            hls.startLoad();
+                        }
+                        break;
+                    case Hls.ErrorTypes.MEDIA_ERROR:
+                        showError('Media error: trying recovery...');
+                        hls.recoverMediaError();
+                        break;
+                    default:
+                        showError('Media cannot be recovered: ' + data.details);
+                        hls.destroy();
+                        break;
+                }
+            });
+
+            hls.attachMedia(video);
+        });
+    } catch (error) {
+        console.error("Legacy API failed:", error);
+        throw error; // Re-throw to show error to user
+    }
 }
 
 /**
