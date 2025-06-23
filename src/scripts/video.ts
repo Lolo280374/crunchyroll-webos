@@ -6,6 +6,8 @@ declare var Hls: any
 
 // Add this variable at the top of your file where you define hls
 let dashPlayer: any = null;
+let streamTimeout: number | null = null;
+let playbackStarted = false;
 
 let hls = null
 let area: HTMLElement = null
@@ -240,24 +242,57 @@ const loadClosestEpisodes: Callback = async ({ state }) => {
  * @param component
  */
 const streamVideo: Callback = async ({ state }) => {
-    const episodeId = state.episodeId
-    const videoId = state.videoId
+    const episodeId = state.episodeId;
+    const videoId = state.videoId;
 
-console.log("DASH.js available:", typeof window.dashjs !== 'undefined');
+    // Clear existing timeout if any
+    if (streamTimeout !== null) {
+        clearTimeout(streamTimeout);
+        streamTimeout = null;
+    }
+    
+    // Reset playback flag
+    playbackStarted = false;
 
-    // Get playhead info as before
-    const playheadResponse = await App.playHeads([episodeId], {})
-    let playhead = 0
-    let duration = 0
+    console.log("DASH.js available:", typeof window.dashjs !== 'undefined');
 
-    if( playheadResponse && playheadResponse.data && playheadResponse.data.length ){
-        playhead = playheadResponse.data[0].playhead
-        duration = playheadResponse.data[0].duration
+    // Get playhead info
+    const playheadResponse = await App.playHeads([episodeId], {});
+    let playhead = 0;
+    let duration = 0;
+
+    if (playheadResponse && playheadResponse.data && playheadResponse.data.length) {
+        playhead = playheadResponse.data[0].playhead;
+        duration = playheadResponse.data[0].duration;
     }
 
+    // Reset playhead if near the end or very beginning
     if (playhead / duration > 0.90 || playhead < 30) {
-        playhead = 0
+        playhead = 0;
     }
+
+    // Set up improved diagnostics
+    video.addEventListener('loadstart', () => console.log("Video: loadstart"));
+    video.addEventListener('loadedmetadata', () => console.log("Video: loadedmetadata"));
+    video.addEventListener('canplay', () => {
+        console.log("Video: canplay");
+        if (!playbackStarted) {
+            playbackStarted = true;
+            area.classList.remove('video-is-loading');
+            area.classList.add('video-is-loaded');
+        }
+    });
+    video.addEventListener('playing', () => {
+        console.log("Video: playing");
+        if (!playbackStarted) {
+            playbackStarted = true;
+            area.classList.remove('video-is-loading');
+            area.classList.add('video-is-loaded');
+        }
+    });
+    video.addEventListener('error', (e) => {
+        console.error("Video error:", video.error);
+    });
 
     try {
         console.log("Attempting to use modern streaming API...");
@@ -271,6 +306,7 @@ console.log("DASH.js available:", typeof window.dashjs !== 'undefined');
         
         if (!modernResponse.error && (modernResponse.url || (modernResponse.hardSubs && Object.keys(modernResponse.hardSubs).length))) {
             console.log("Modern streaming API successful!");
+            console.log("Stream data:", JSON.stringify(modernResponse).substring(0, 500) + "...");
             
             // Choose the appropriate stream URL
             let stream = '';
@@ -290,6 +326,9 @@ console.log("DASH.js available:", typeof window.dashjs !== 'undefined');
                 throw Error('No streams to load.');
             }
             
+            // Print the stream URL for debugging
+            console.log(`Full stream URL: ${stream}`);
+            
             // Handle proxy if needed
             const proxyUrl = document.body.dataset.proxyUrl;
             const proxyEncode = document.body.dataset.proxyEncode;
@@ -299,87 +338,106 @@ console.log("DASH.js available:", typeof window.dashjs !== 'undefined');
 
             area.classList.add('video-is-loading');
 
-            // Detect if this is a DASH stream (ends with .mpd)
-            const isDashStream = stream.includes('.mpd') || stream.includes('manifest.mpd');
-            console.log(`Detected ${isDashStream ? 'DASH' : 'HLS'} stream format`);
-
-            // If it's a DASH stream and dashjs is available, use DASH player
-            if (isDashStream && typeof window.dashjs !== 'undefined') {
-                console.log("Using DASH player for MPD stream");
+            // WebOS-SPECIFIC APPROACH - Try different playback methods in sequence
+            
+            // 1. First: Try the native video element with prepared request for DASH content
+            if (stream.includes('.mpd') || stream.includes('manifest.mpd')) {
+                console.log("Using webOS-optimized DASH playback approach");
                 
-                // Clean up any existing HLS player
+                // Clean up any existing players
                 if (hls) {
                     hls.destroy();
                     hls = null;
                 }
+                if (dashPlayer) {
+                    dashPlayer.destroy();
+                    dashPlayer = null;
+                }
                 
+                // Try native webOS playback first
                 return await new Promise((resolve) => {
-                    try {
-                        // Create dashjs player
-                        dashPlayer = window.dashjs.MediaPlayer().create();
-                        
-                        // Add authorization header to all DASH requests
-                        dashPlayer.extend("RequestModifier", function() {
-                            return {
-                                modifyRequestHeader: function(xhr: XMLHttpRequest) {
-                                    xhr.setRequestHeader('Authorization', 'Bearer ' + accessToken);
-                                    console.log("Added Authorization header to DASH request");
-                                    return xhr;
+                    // Pre-fetch the manifest with proper credentials
+                    console.log("Pre-fetching manifest with auth token");
+                    const xhr = new XMLHttpRequest();
+                    xhr.open('GET', stream, true);
+                    xhr.setRequestHeader('Authorization', 'Bearer ' + accessToken);
+                    
+                    xhr.onload = function() {
+                        if (xhr.status === 200) {
+                            console.log("Successfully pre-fetched manifest");
+                            
+                            try {
+                                // Clear video element
+                                video.pause();
+                                video.removeAttribute('src');
+                                video.load();
+                                
+                                // Set up video element directly
+                                console.log("Setting up video element with DASH source");
+                                
+                                // Add Authorization via a special meta tag that some platforms respect
+                                const meta = document.createElement('meta');
+                                meta.httpEquiv = 'Authorization';
+                                meta.content = 'Bearer ' + accessToken;
+                                document.head.appendChild(meta);
+                                
+                                // Set directly on video element
+                                video.setAttribute('data-dashjs-player', '');
+                                video.setAttribute('type', 'application/dash+xml');
+                                
+                                // On WebOS, sometimes this direct approach works better
+                                video.src = stream;
+                                
+                                if (playhead > 0) {
+                                    video.currentTime = playhead;
                                 }
-                            };
-                        });
-                        
-                        // Setup event handling
-                        dashPlayer.on("error", function(e: any) {
-                            console.error("DASH error:", e);
-                            showError('DASH playback error: ' + (e.error || 'Unknown error'));
-                        });
-                        
-                        dashPlayer.on("playbackMetaDataLoaded", function() {
-                            area.classList.remove('video-is-loading');
-                            area.classList.add('video-is-loaded');
-                            console.log("DASH stream loaded successfully");
-                            resolve(null);
-                        });
-
-                        dashPlayer.on("qualityChanged", function(e: any) {
-                            let quality = $('.video-quality', area);
-                            let bitrateInfo = dashPlayer.getBitrateInfoListFor('video');
-                            let currentQuality = e.newQuality;
-                            let level = bitrateInfo[currentQuality];
-                            let next = currentQuality - 1;
-
-                            if (next < 0) {
-                                next = bitrateInfo.length - 1;
+                                
+                                // Set timeout for fallback method
+                                streamTimeout = setTimeout(() => {
+                                    if (!playbackStarted) {
+                                        console.log("Direct playback failed, trying DASH.js fallback");
+                                        tryDashJsPlayback(stream, accessToken, playhead, resolve);
+                                    }
+                                }, 8000) as unknown as number;
+                                
+                                // Start playback
+                                video.load();
+                                const playPromise = video.play();
+                                if (playPromise !== undefined) {
+                                    playPromise.then(() => {
+                                        console.log("Native playback started successfully");
+                                    }).catch(error => {
+                                        console.error("Native playback failed:", error);
+                                        tryDashJsPlayback(stream, accessToken, playhead, resolve);
+                                    });
+                                }
+                            } catch (err) {
+                                console.error("Error in native playback setup:", err);
+                                tryDashJsPlayback(stream, accessToken, playhead, resolve);
                             }
-
-                            quality.dataset.next = next;
-                            $('span', quality).innerText = level.height + 'p';
-                        });
-                        
-                        // Initialize the player
-                        dashPlayer.initialize(video, stream, true);
-                        
-                        // Set initial position if needed
-                        if (playhead > 0) {
-                            dashPlayer.seek(playhead);
+                        } else {
+                            console.error("Failed to pre-fetch manifest:", xhr.status);
+                            tryDashJsPlayback(stream, accessToken, playhead, resolve);
                         }
-                    } catch (dashError) {
-                        console.error("Error initializing DASH player:", dashError);
-                        showError('Failed to initialize DASH player: ' + dashError.message);
-                        resolve(null);
-                    }
+                    };
+                    
+                    xhr.onerror = function() {
+                        console.error("XHR failed when pre-fetching manifest");
+                        tryDashJsPlayback(stream, accessToken, playhead, resolve);
+                    };
+                    
+                    xhr.send();
                 });
             } else {
-                // Use HLS.js (either for HLS streams or as fallback when dashjs is not available)
-                console.log("Using HLS player" + (isDashStream ? " (fallback for DASH)" : ""));
+                // This is an HLS stream - use HLS.js
+                console.log("Using HLS.js for HLS stream");
                 
                 return await new Promise((resolve) => {
                     if (!Hls.isSupported()) {
-                        throw Error('Video format not supported.');
+                        throw Error('HLS format not supported.');
                     }
 
-                    // Configure HLS.js with the crucial xhrSetup function
+                    // Configure HLS.js
                     hls = new Hls({
                         autoStartLoad: false,
                         startLevel: -1,
@@ -388,24 +446,26 @@ console.log("DASH.js available:", typeof window.dashjs !== 'undefined');
                         maxBufferSize: 30 * 1000 * 1000,
                         maxFragLookUpTolerance: 0.2,
                         nudgeMaxRetry: 10,
-                        // THIS IS THE KEY PART - Add the Authorization header to all HLS requests
                         xhrSetup: function(xhr, url) {
-                            // Add Authorization header to all requests
                             xhr.setRequestHeader('Authorization', 'Bearer ' + accessToken);
                             console.log("Added Authorization header to HLS request");
                         }
                     });
 
-                    // Rest of your HLS setup remains the same
+                    // Set up HLS events
                     hls.on(Hls.Events.MEDIA_ATTACHED, () => {
+                        console.log("HLS: media attached, loading source");
                         hls.loadSource(stream);
                     });
 
                     hls.on(Hls.Events.MANIFEST_PARSED, () => {
+                        console.log("HLS: manifest parsed, starting load from", playhead);
                         hls.startLoad(playhead);
                     });
 
                     hls.on(Hls.Events.LEVEL_LOADED, () => {
+                        console.log("HLS: level loaded");
+                        playbackStarted = true;
                         area.classList.remove('video-is-loading');
                         area.classList.add('video-is-loaded');
                     });
@@ -424,11 +484,11 @@ console.log("DASH.js available:", typeof window.dashjs !== 'undefined');
                     });
 
                     hls.once(Hls.Events.FRAG_LOADED, () => {
+                        console.log("HLS: fragment loaded");
                         resolve(null);
                     });
 
                     hls.on(Hls.Events.ERROR, (_event: Event, data: any) => {
-                        // Log more details about HLS errors
                         console.error("HLS error:", data);
                         
                         if (!data.fatal) {
@@ -440,8 +500,9 @@ console.log("DASH.js available:", typeof window.dashjs !== 'undefined');
                                 hls.startLoad();
                                 break;
                             case Hls.ErrorTypes.NETWORK_ERROR:
-                                if (data.details == 'manifestLoadError') {
-                                    showError('Episode cannot be played because of CORS error or invalid token. Error details: ' + data.response?.code);
+                                if (data.details === 'manifestLoadError') {
+                                    showError('Episode cannot be played because of CORS error or invalid token: ' + 
+                                             (data.response ? data.response.code : 'unknown'));
                                 } else {
                                     hls.startLoad();
                                 }
@@ -457,19 +518,27 @@ console.log("DASH.js available:", typeof window.dashjs !== 'undefined');
                         }
                     });
 
+                    // Attach media and set timeout for fallback
+                    console.log("Attaching media to HLS.js");
                     hls.attachMedia(video);
+                    
+                    streamTimeout = setTimeout(() => {
+                        if (!playbackStarted) {
+                            console.log("HLS playback failed to start, showing error");
+                            showError('Playback failed to start. Your device may not support this video format.');
+                        }
+                    }, 15000) as unknown as number;
                 });
             }
         } else {
-            // If modern API fails, fall back to legacy method
             console.log("Modern API didn't return valid stream info, falling back to legacy API");
             throw new Error("Modern API failed");
         }
     } catch (modernError) {
-        // Fall back to legacy streaming method
         console.error("Modern streaming failed:", modernError);
         console.log("Falling back to legacy streaming API...");
 
+        // Legacy streaming code (unchanged)
         try {
             const streamsResponse = await App.streams(videoId, {});
             
@@ -498,7 +567,6 @@ console.log("DASH.js available:", typeof window.dashjs !== 'undefined');
                 throw Error('No streams to load.');
             }
 
-            // Legacy streaming setup
             console.log(`Legacy stream URL (first 100 chars): ${stream.substring(0, 100)}...`);
             
             const proxyUrl = document.body.dataset.proxyUrl;
@@ -510,7 +578,6 @@ console.log("DASH.js available:", typeof window.dashjs !== 'undefined');
             area.classList.add('video-is-loading');
 
             return await new Promise((resolve) => {
-                // Same HLS setup as before
                 if (!Hls.isSupported()) {
                     throw Error('Video format not supported.');
                 }
@@ -536,6 +603,7 @@ console.log("DASH.js available:", typeof window.dashjs !== 'undefined');
                 hls.on(Hls.Events.LEVEL_LOADED, () => {
                     area.classList.remove('video-is-loading');
                     area.classList.add('video-is-loaded');
+                    playbackStarted = true;
                 });
 
                 hls.on(Hls.Events.LEVEL_SWITCHED, () => {
@@ -583,52 +651,85 @@ console.log("DASH.js available:", typeof window.dashjs !== 'undefined');
                 });
 
                 hls.attachMedia(video);
+                
+                streamTimeout = setTimeout(() => {
+                    if (!playbackStarted) {
+                        console.log("Legacy playback failed to start, showing error");
+                        showError('Playback failed to start. Your device may not support this video format.');
+                    }
+                }, 15000) as unknown as number;
             });
         } catch (error) {
             console.error("Legacy API failed:", error);
-            throw error; // Re-throw to show error to user
+            throw error;
         }
     }
-}
+};
 
-// Video quality selector
-const setupQualitySelector = () => {
-    const quality = $('.video-quality', area);
+// Helper function for DASH.js fallback
+function tryDashJsPlayback(stream: string, accessToken: string, playhead: number, resolve: Function) {
+    if (streamTimeout !== null) {
+        clearTimeout(streamTimeout);
+        streamTimeout = null;
+    }
     
-    quality.addEventListener('click', () => {
-        if (hls) {
-            // HLS quality handling
-            let next = parseInt(quality.dataset.next);
-            hls.currentLevel = next;
-        } else if (dashPlayer) {
-            // DASH quality handling
-            const bitrateInfo = dashPlayer.getBitrateInfoListFor('video');
-            const currentIndex = dashPlayer.getQualityFor('video');
-            let nextIndex = currentIndex - 1;
-            
-            if (nextIndex < 0) {
-                nextIndex = bitrateInfo.length - 1;
-            }
-            
-            dashPlayer.setQualityFor('video', nextIndex);
-            
-            // Update quality display
-            const level = bitrateInfo[nextIndex];
-            quality.dataset.next = '' + nextIndex;
-            $('span', quality).innerText = level.height + 'p';
-        }
-    });
+    if (typeof window.dashjs === 'undefined' || !window.dashjs.MediaPlayer) {
+        console.error("DASH.js not available for fallback");
+        showError('Video format not supported by this device.');
+        resolve(null);
+        return;
+    }
     
-    // For DASH player, set up quality display on load
-    if (dashPlayer) {
-        dashPlayer.on('streamInitialized', () => {
-            const bitrateInfo = dashPlayer.getBitrateInfoListFor('video');
-            const currentIndex = dashPlayer.getQualityFor('video');
-            const level = bitrateInfo[currentIndex];
-            
-            quality.dataset.next = '' + (currentIndex - 1);
-            $('span', quality).innerText = level.height + 'p';
+    console.log("Trying DASH.js fallback");
+    
+    try {
+        // Create dashjs player
+        dashPlayer = window.dashjs.MediaPlayer().create();
+        
+        // Add authorization header to all DASH requests
+        dashPlayer.extend("RequestModifier", function() {
+            return {
+                modifyRequestHeader: function(xhr: XMLHttpRequest) {
+                    xhr.setRequestHeader('Authorization', 'Bearer ' + accessToken);
+                    console.log("Added Authorization header to DASH request");
+                    return xhr;
+                }
+            };
         });
+        
+        // Setup event handling
+        dashPlayer.on("error", function(e: any) {
+            console.error("DASH error:", e);
+            showError('Playback error: ' + (e.error || 'Unknown error'));
+        });
+        
+        dashPlayer.on("playbackMetaDataLoaded", function() {
+            console.log("DASH: metadata loaded");
+            area.classList.remove('video-is-loading');
+            area.classList.add('video-is-loaded');
+            playbackStarted = true;
+            resolve(null);
+        });
+        
+        // Initialize the player
+        dashPlayer.initialize(video, stream, true);
+        
+        // Set initial position if needed
+        if (playhead > 0) {
+            dashPlayer.seek(playhead);
+        }
+        
+        // Set timeout for final error
+        streamTimeout = setTimeout(() => {
+            if (!playbackStarted) {
+                console.log("DASH.js fallback failed to start, showing error");
+                showError('Unable to play this video on your device.');
+            }
+        }, 10000) as unknown as number;
+    } catch (dashError) {
+        console.error("Error initializing DASH player:", dashError);
+        showError('Failed to initialize video player: ' + dashError.message);
+        resolve(null);
     }
 }
 
