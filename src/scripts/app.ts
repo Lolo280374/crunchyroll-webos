@@ -2,11 +2,6 @@ import { $, Engine, fire } from "./vine"
 import { Api } from "./api"
 import type { Data } from "./api"
 
-// Set a common browser User-Agent
-const headers = {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-};
-
 /**
  * Retrieve template as text
  * @param name
@@ -17,18 +12,6 @@ const getTemplate = async (name: string, data: any) => {
     const element = $('script#template-' + name)
     const template = element.innerHTML
     return Engine.parse(template, data)
-}
-
-/**
- * Retrieve modern streams for playback
- * @param contentId 
- * @returns 
- */
-const modernStreams = async (contentId: string) => {
-    await refreshSession();
-    const accessToken = localStorage.getItem('accessToken');
-    
-    return Api.modernStreams(accessToken, contentId);
 }
 
 /**
@@ -792,7 +775,6 @@ export const App = {
     getImage,
     formatError,
     login,
-    modernStreams,
     logout,
     isLoggedIn,
     refreshSession,

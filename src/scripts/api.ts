@@ -60,43 +60,14 @@ const request = async (method: string, endpoint: string, body: any, headers: Hea
         referrerPolicy: 'no-referrer' as ReferrerPolicy
     }
 
-       // ...existing code above remains the same...
     const result = await fetch(url, requestOptions)
 
     if( result.status === 204 ){
         return {} as Result
     }
 
-    try {
-        // Try to parse as JSON
-        const response = await result.json()
-        return response as Result
-    } catch (error) {
-        // If JSON parsing fails, try to get the text content for debugging
-        try {
-            // We need to get a fresh response since .json() already consumed the body
-            const freshResult = await fetch(url, requestOptions)
-            const textContent = await freshResult.text()
-            
-            // Create a more helpful error that includes the response text
-            const errorMessage = `Failed to parse JSON response. Status: ${result.status}, Content: ${textContent.substring(0, 200)}...`
-            console.error(errorMessage)
-            
-            // Return an error object that won't break the app but will show the error
-            return { 
-                error: true, 
-                errorMessage: errorMessage,
-                statusCode: result.status
-            } as unknown as Result
-        } catch (secondError) {
-            // If even getting the text fails, return a generic error
-            return { 
-                error: true, 
-                errorMessage: `Failed to process response: ${error.message}`,
-                statusCode: result.status
-            } as unknown as Result
-        }
-    }
+    const response = await result.json()
+    return response as Result
 }
 
 /**
@@ -285,39 +256,6 @@ const search = async (accessToken: string, filters: Data) => {
     const result = await request('GET', endpoint, null, headers)
 
     return result
-}
-
-const modernStreams = async (accessToken: string, contentId: string) => {
-    const headers = {
-        'Authorization': 'Bearer ' + accessToken,
-        'Content-Type': 'application/json'
-    }
-
-    console.log(`Using modern streaming API for contentId: ${contentId}`);
-    
-    // If contentId doesn't start with 'G', it's probably not a valid GUID format
-    // This check helps avoid unnecessary 404 errors
-    if (!contentId || !contentId.includes('G')) {
-        console.error("Invalid contentId format for modern API:", contentId);
-        return { error: true, errorMessage: "Invalid contentId format for modern API" };
-    }
-    
-    // Try a few different URL formats if necessary
-    const endpoints = [
-        `https://cr-play-service.prd.crunchyrollsvc.com/v1/${contentId}/web/firefox/play`,
-        `https://cr-play-service.prd.crunchyrollsvc.com/v1/${contentId}/web/chrome/play`
-    ];
-    
-    // Try the first endpoint by default
-    let result = await request('GET', endpoints[0], null, headers);
-    
-    // If first endpoint fails, try the chrome endpoint
-    if (result.error) {
-        console.log("Firefox endpoint failed, trying Chrome endpoint...");
-        result = await request('GET', endpoints[1], null, headers);
-    }
-    
-    return result;
 }
 
 /**
@@ -807,7 +745,6 @@ export type {
 }
 
 export const Api = {
-    modernStreams,
     encode,
     request,
     makeLogin,

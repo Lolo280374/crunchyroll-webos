@@ -4,9 +4,6 @@ import { App } from "./app"
 
 declare var Hls: any
 
-// Add this variable at the top of your file where you define hls
-let dashPlayer: any = null;
-
 let hls = null
 let area: HTMLElement = null
 let video: HTMLVideoElement = null
@@ -98,93 +95,35 @@ const hideVideo = () => {
  * Load episode
  * @param component
  */
-
 const loadEpisode: Callback = async ({ state }) => {
-    const episodeId = state.episodeId;
-    const episodeResponse = await App.episode(episodeId, {});
-    
-// For testing - try a known working ID
-const testVideoId = "GG1U28242"; // Wind Breaker episode
-console.log("Testing with hardcoded ID:", testVideoId);
-const testResponse = await App.modernStreams(testVideoId);
-console.log("Test response:", testResponse.error ? "Error" : "Success");
 
-    if (episodeResponse.error) {
-        throw Error(`Episode info error: ${episodeResponse.errorMessage || 'Unknown error'}`);
-    }
-    
-    const episodeInfo = episodeResponse.data[0];
-    const episodeMetadata = episodeInfo.episode_metadata;
+    const episodeId = state.episodeId
+    const episodeResponse = await App.episode(episodeId, {})
+    const episodeInfo = episodeResponse.data[0]
+    const episodeMetadata = episodeInfo.episode_metadata
 
-    const serieName = episodeMetadata.series_title;
-    const seasonNumber = episodeMetadata.season_number;
-    const episodeNumber = episodeMetadata.episode_number || episodeMetadata.episode;
-    const episodeName = episodeInfo.title;
+    const serieName = episodeMetadata.series_title
+    const seasonNumber = episodeMetadata.season_number
+    const episodeNumber = episodeMetadata.episode_number || episodeMetadata.episode
+    const episodeName = episodeInfo.title
 
-    // Log the entire episode response to find the right format
-    console.log("Full episode response:", JSON.stringify(episodeInfo));
+    const streamsLink = String(episodeInfo.streams_link)
+    const videoId = streamsLink.replace('/content/v2/cms/videos/', '').replace('/streams', '')
+    state.videoId = videoId
 
-    // Extract the new format videoId (looks like GG1U28242)
-    let videoId = '';
-    
-    // Check if the episode data has a 'versions' array
-    if (Array.isArray(episodeInfo.versions) && episodeInfo.versions.length > 0) {
-        // Get user's preferred audio language
-        const preferredAudio = localStorage.getItem('preferredContentAudioLanguage');
-        
-        // Try to find a version matching the preferred language
-        let matchedVersion = episodeInfo.versions.find(v => v.audio_locale === preferredAudio);
-        
-        // If no match for preferred language, use the first version
-        if (!matchedVersion && episodeInfo.versions.length > 0) {
-            matchedVersion = episodeInfo.versions[0];
-        }
-        
-        if (matchedVersion && matchedVersion.guid) {
-            videoId = matchedVersion.guid;
-            console.log(`Using version GUID as videoId: ${videoId}`);
-        }
-    }
-    
-    // If we still don't have a videoId, try other sources
-    if (!videoId) {
-        if (episodeInfo.guid) {
-            videoId = episodeInfo.guid;
-            console.log(`Using episode GUID as videoId: ${videoId}`);
-        } else if (episodeInfo.media_id) {
-            videoId = episodeInfo.media_id;
-            console.log(`Using media_id as videoId: ${videoId}`);
-        } else if (episodeInfo.id && episodeInfo.id.includes('G')) {
-            // Some episodes have a G-prefixed ID directly in the id field
-            videoId = episodeInfo.id;
-            console.log(`Using episode.id as videoId: ${videoId}`);
-        } else {
-            // Last resort - use the episodeId
-            videoId = episodeId;
-            console.log(`Using episodeId as videoId: ${videoId}`);
-        }
-    }
-    
-    // If the videoId doesn't start with G, it's probably not a valid GUID
-    if (videoId && !videoId.includes('G')) {
-        console.warn(`Warning: videoId ${videoId} doesn't look like a valid GUID (should start with G)`);
-    }
-    
-    state.videoId = videoId;
-    
-    // Rest of the function remains unchanged
-    const serie = $('.video-serie', area);
-    serie.innerHTML = serieName + ' / S' + seasonNumber + ' / E' + episodeNumber;
+    const serie = $('.video-serie', area)
+    serie.innerHTML = serieName + ' / S' + seasonNumber + ' / E' + episodeNumber
 
-    const title = $('.video-title', area);
-    title.innerHTML = episodeName;
+    const title = $('.video-title', area)
+    title.innerHTML = episodeName
 
-    const serieId = state.serieId;
-    const seasonId = state.seasonId;
-    const episodesUrl = '/serie/' + serieId + '/season/' + seasonId;
+    const serieId = state.serieId
+    const seasonId = state.seasonId
+    const episodesUrl = '/serie/' + serieId + '/season/' + seasonId
 
-    const episodes = $('.video-episodes', area);
-    episodes.dataset.url = episodesUrl;
+    const episodes = $('.video-episodes', area)
+    episodes.dataset.url = episodesUrl
+
 }
 
 /**
@@ -240,12 +179,10 @@ const loadClosestEpisodes: Callback = async ({ state }) => {
  * @param component
  */
 const streamVideo: Callback = async ({ state }) => {
+
     const episodeId = state.episodeId
     const videoId = state.videoId
 
-console.log("DASH.js available:", typeof window.dashjs !== 'undefined');
-
-    // Get playhead info as before
     const playheadResponse = await App.playHeads([episodeId], {})
     let playhead = 0
     let duration = 0
@@ -259,377 +196,114 @@ console.log("DASH.js available:", typeof window.dashjs !== 'undefined');
         playhead = 0
     }
 
-    try {
-        console.log("Attempting to use modern streaming API...");
-        
-        // Get the current access token to use in all requests
-        const accessToken = localStorage.getItem('accessToken');
-        console.log("Using access token:", accessToken ? "Present" : "Missing");
-        
-        // Get stream info from the modern API
-        const modernResponse = await App.modernStreams(videoId);
-        
-        if (!modernResponse.error && (modernResponse.url || (modernResponse.hardSubs && Object.keys(modernResponse.hardSubs).length))) {
-            console.log("Modern streaming API successful!");
-            
-            // Choose the appropriate stream URL
-            let stream = '';
-            const locale = localStorage.getItem('preferredContentSubtitleLanguage');
-            
-            // Check if we have hardSubs in the preferred language
-            if (modernResponse.hardSubs && modernResponse.hardSubs[locale]) {
-                stream = modernResponse.hardSubs[locale].url;
-                console.log(`Using hardsub URL for locale ${locale}`);
-            } else if (modernResponse.url) {
-                // Otherwise use the main URL
-                stream = modernResponse.url;
-                console.log("Using main URL");
-            }
-
-            if (!stream) {
-                throw Error('No streams to load.');
-            }
-            
-            // Handle proxy if needed
-            const proxyUrl = document.body.dataset.proxyUrl;
-            const proxyEncode = document.body.dataset.proxyEncode;
-            if (proxyUrl) {
-                stream = proxyUrl + (proxyEncode === "true" ? encodeURIComponent(stream) : stream);
-            }
-
-            area.classList.add('video-is-loading');
-
-            // Detect if this is a DASH stream (ends with .mpd)
-            const isDashStream = stream.includes('.mpd') || stream.includes('manifest.mpd');
-            console.log(`Detected ${isDashStream ? 'DASH' : 'HLS'} stream format`);
-
-            // If it's a DASH stream and dashjs is available, use DASH player
-            if (isDashStream && typeof window.dashjs !== 'undefined') {
-                console.log("Using DASH player for MPD stream");
-                
-                // Clean up any existing HLS player
-                if (hls) {
-                    hls.destroy();
-                    hls = null;
-                }
-                
-                return await new Promise((resolve) => {
-                    try {
-                        // Create dashjs player
-                        dashPlayer = window.dashjs.MediaPlayer().create();
-                        
-                        // Add authorization header to all DASH requests
-                        dashPlayer.extend("RequestModifier", function() {
-                            return {
-                                modifyRequestHeader: function(xhr: XMLHttpRequest) {
-                                    xhr.setRequestHeader('Authorization', 'Bearer ' + accessToken);
-                                    console.log("Added Authorization header to DASH request");
-                                    return xhr;
-                                }
-                            };
-                        });
-                        
-                        // Setup event handling
-                        dashPlayer.on("error", function(e: any) {
-                            console.error("DASH error:", e);
-                            showError('DASH playback error: ' + (e.error || 'Unknown error'));
-                        });
-                        
-                        dashPlayer.on("playbackMetaDataLoaded", function() {
-                            area.classList.remove('video-is-loading');
-                            area.classList.add('video-is-loaded');
-                            console.log("DASH stream loaded successfully");
-                            resolve(null);
-                        });
-
-                        dashPlayer.on("qualityChanged", function(e: any) {
-                            let quality = $('.video-quality', area);
-                            let bitrateInfo = dashPlayer.getBitrateInfoListFor('video');
-                            let currentQuality = e.newQuality;
-                            let level = bitrateInfo[currentQuality];
-                            let next = currentQuality - 1;
-
-                            if (next < 0) {
-                                next = bitrateInfo.length - 1;
-                            }
-
-                            quality.dataset.next = next;
-                            $('span', quality).innerText = level.height + 'p';
-                        });
-                        
-                        // Initialize the player
-                        dashPlayer.initialize(video, stream, true);
-                        
-                        // Set initial position if needed
-                        if (playhead > 0) {
-                            dashPlayer.seek(playhead);
-                        }
-                    } catch (dashError) {
-                        console.error("Error initializing DASH player:", dashError);
-                        showError('Failed to initialize DASH player: ' + dashError.message);
-                        resolve(null);
-                    }
-                });
-            } else {
-                // Use HLS.js (either for HLS streams or as fallback when dashjs is not available)
-                console.log("Using HLS player" + (isDashStream ? " (fallback for DASH)" : ""));
-                
-                return await new Promise((resolve) => {
-                    if (!Hls.isSupported()) {
-                        throw Error('Video format not supported.');
-                    }
-
-                    // Configure HLS.js with the crucial xhrSetup function
-                    hls = new Hls({
-                        autoStartLoad: false,
-                        startLevel: -1,
-                        maxBufferLength: 15,
-                        backBufferLength: 15,
-                        maxBufferSize: 30 * 1000 * 1000,
-                        maxFragLookUpTolerance: 0.2,
-                        nudgeMaxRetry: 10,
-                        // THIS IS THE KEY PART - Add the Authorization header to all HLS requests
-                        xhrSetup: function(xhr, url) {
-                            // Add Authorization header to all requests
-                            xhr.setRequestHeader('Authorization', 'Bearer ' + accessToken);
-                            console.log("Added Authorization header to HLS request");
-                        }
-                    });
-
-                    // Rest of your HLS setup remains the same
-                    hls.on(Hls.Events.MEDIA_ATTACHED, () => {
-                        hls.loadSource(stream);
-                    });
-
-                    hls.on(Hls.Events.MANIFEST_PARSED, () => {
-                        hls.startLoad(playhead);
-                    });
-
-                    hls.on(Hls.Events.LEVEL_LOADED, () => {
-                        area.classList.remove('video-is-loading');
-                        area.classList.add('video-is-loaded');
-                    });
-
-                    hls.on(Hls.Events.LEVEL_SWITCHED, () => {
-                        let quality = $('.video-quality', area);
-                        let level = hls.levels[hls.currentLevel];
-                        let next = hls.currentLevel - 1;
-
-                        if (next < -1) {
-                            next = hls.levels.length - 1;
-                        }
-
-                        quality.dataset.next = next;
-                        $('span', quality).innerText = level.height + 'p';
-                    });
-
-                    hls.once(Hls.Events.FRAG_LOADED, () => {
-                        resolve(null);
-                    });
-
-                    hls.on(Hls.Events.ERROR, (_event: Event, data: any) => {
-                        // Log more details about HLS errors
-                        console.error("HLS error:", data);
-                        
-                        if (!data.fatal) {
-                            return;
-                        }
-
-                        switch (data.type) {
-                            case Hls.ErrorTypes.OTHER_ERROR:
-                                hls.startLoad();
-                                break;
-                            case Hls.ErrorTypes.NETWORK_ERROR:
-                                if (data.details == 'manifestLoadError') {
-                                    showError('Episode cannot be played because of CORS error or invalid token. Error details: ' + data.response?.code);
-                                } else {
-                                    hls.startLoad();
-                                }
-                                break;
-                            case Hls.ErrorTypes.MEDIA_ERROR:
-                                showError('Media error: trying recovery...');
-                                hls.recoverMediaError();
-                                break;
-                            default:
-                                showError('Media cannot be recovered: ' + data.details);
-                                hls.destroy();
-                                break;
-                        }
-                    });
-
-                    hls.attachMedia(video);
-                });
-            }
-        } else {
-            // If modern API fails, fall back to legacy method
-            console.log("Modern API didn't return valid stream info, falling back to legacy API");
-            throw new Error("Modern API failed");
-        }
-    } catch (modernError) {
-        // Fall back to legacy streaming method
-        console.error("Modern streaming failed:", modernError);
-        console.log("Falling back to legacy streaming API...");
-
-        try {
-            const streamsResponse = await App.streams(videoId, {});
-            
-            console.log("Legacy API response:", JSON.stringify(streamsResponse).substring(0, 500) + "...");
-            
-            if (streamsResponse.error) {
-                throw Error(`Stream API error: ${streamsResponse.errorMessage || 'Unknown error'}`);
-            }
-            
-            if (!streamsResponse || !streamsResponse.streams) {
-                throw Error('Streams not available for this episode.');
-            }
-
-            const streams = streamsResponse.streams.adaptive_hls || [];
-            const locale = localStorage.getItem('preferredContentSubtitleLanguage');
-            const priorities = [locale, ''];
-
-            let stream = '';
-            priorities.forEach((locale) => {
-                if (streams[locale] && !stream) {
-                    stream = streams[locale].url;
-                }
-            });
-
-            if (!stream) {
-                throw Error('No streams to load.');
-            }
-
-            // Legacy streaming setup
-            console.log(`Legacy stream URL (first 100 chars): ${stream.substring(0, 100)}...`);
-            
-            const proxyUrl = document.body.dataset.proxyUrl;
-            const proxyEncode = document.body.dataset.proxyEncode;
-            if (proxyUrl) {
-                stream = proxyUrl + (proxyEncode === "true" ? encodeURIComponent(stream) : stream);
-            }
-
-            area.classList.add('video-is-loading');
-
-            return await new Promise((resolve) => {
-                // Same HLS setup as before
-                if (!Hls.isSupported()) {
-                    throw Error('Video format not supported.');
-                }
-
-                hls = new Hls({
-                    autoStartLoad: false,
-                    startLevel: -1,
-                    maxBufferLength: 15,
-                    backBufferLength: 15,
-                    maxBufferSize: 30 * 1000 * 1000,
-                    maxFragLookUpTolerance: 0.2,
-                    nudgeMaxRetry: 10
-                });
-
-                hls.on(Hls.Events.MEDIA_ATTACHED, () => {
-                    hls.loadSource(stream);
-                });
-
-                hls.on(Hls.Events.MANIFEST_PARSED, () => {
-                    hls.startLoad(playhead);
-                });
-
-                hls.on(Hls.Events.LEVEL_LOADED, () => {
-                    area.classList.remove('video-is-loading');
-                    area.classList.add('video-is-loaded');
-                });
-
-                hls.on(Hls.Events.LEVEL_SWITCHED, () => {
-                    let quality = $('.video-quality', area);
-                    let level = hls.levels[hls.currentLevel];
-                    let next = hls.currentLevel - 1;
-
-                    if (next < -1) {
-                        next = hls.levels.length - 1;
-                    }
-
-                    quality.dataset.next = next;
-                    $('span', quality).innerText = level.height + 'p';
-                });
-
-                hls.once(Hls.Events.FRAG_LOADED, () => {
-                    resolve(null);
-                });
-
-                hls.on(Hls.Events.ERROR, (_event: Event, data: any) => {
-                    if (!data.fatal) {
-                        return;
-                    }
-
-                    switch (data.type) {
-                        case Hls.ErrorTypes.OTHER_ERROR:
-                            hls.startLoad();
-                            break;
-                        case Hls.ErrorTypes.NETWORK_ERROR:
-                            if (data.details == 'manifestLoadError') {
-                                showError('Episode cannot be played because of CORS error. You must use a proxy.');
-                            } else {
-                                hls.startLoad();
-                            }
-                            break;
-                        case Hls.ErrorTypes.MEDIA_ERROR:
-                            showError('Media error: trying recovery...');
-                            hls.recoverMediaError();
-                            break;
-                        default:
-                            showError('Media cannot be recovered: ' + data.details);
-                            hls.destroy();
-                            break;
-                    }
-                });
-
-                hls.attachMedia(video);
-            });
-        } catch (error) {
-            console.error("Legacy API failed:", error);
-            throw error; // Re-throw to show error to user
-        }
+    const streamsResponse = await App.streams(videoId, {})
+    if( !streamsResponse.streams ){
+        throw Error('Streams not available for this episode.')
     }
-}
 
-// Video quality selector
-const setupQualitySelector = () => {
-    const quality = $('.video-quality', area);
-    
-    quality.addEventListener('click', () => {
-        if (hls) {
-            // HLS quality handling
-            let next = parseInt(quality.dataset.next);
-            hls.currentLevel = next;
-        } else if (dashPlayer) {
-            // DASH quality handling
-            const bitrateInfo = dashPlayer.getBitrateInfoListFor('video');
-            const currentIndex = dashPlayer.getQualityFor('video');
-            let nextIndex = currentIndex - 1;
-            
-            if (nextIndex < 0) {
-                nextIndex = bitrateInfo.length - 1;
-            }
-            
-            dashPlayer.setQualityFor('video', nextIndex);
-            
-            // Update quality display
-            const level = bitrateInfo[nextIndex];
-            quality.dataset.next = '' + nextIndex;
-            $('span', quality).innerText = level.height + 'p';
+    const streams = streamsResponse.streams.adaptive_hls || []
+    const locale = localStorage.getItem('preferredContentSubtitleLanguage')
+    const priorities = [locale, '']
+
+    let stream = ''
+    priorities.forEach((locale) => {
+        if( streams[locale] && !stream ){
+            stream = streams[locale].url
         }
-    });
-    
-    // For DASH player, set up quality display on load
-    if (dashPlayer) {
-        dashPlayer.on('streamInitialized', () => {
-            const bitrateInfo = dashPlayer.getBitrateInfoListFor('video');
-            const currentIndex = dashPlayer.getQualityFor('video');
-            const level = bitrateInfo[currentIndex];
-            
-            quality.dataset.next = '' + (currentIndex - 1);
-            $('span', quality).innerText = level.height + 'p';
-        });
+    })
+
+    if (!stream) {
+        throw Error('No streams to load.')
     }
+
+    const proxyUrl = document.body.dataset.proxyUrl
+    const proxyEncode = document.body.dataset.proxyEncode
+    if (proxyUrl) {
+        stream = proxyUrl + (proxyEncode === "true" ? encodeURIComponent(stream) : stream)
+    }
+
+    area.classList.add('video-is-loading')
+
+    return await new Promise((resolve) => {
+
+        if (!Hls.isSupported()) {
+            throw Error('Video format not supported.')
+        }
+
+        hls = new Hls({
+            autoStartLoad: false,
+            startLevel: -1, // auto
+            maxBufferLength: 15, // 15s
+            backBufferLength: 15, // 15s
+            maxBufferSize: 30 * 1000 * 1000, // 30MB
+            maxFragLookUpTolerance: 0.2,
+            nudgeMaxRetry: 10
+        })
+
+        hls.on(Hls.Events.MEDIA_ATTACHED, () => {
+            hls.loadSource(stream)
+        })
+
+        hls.on(Hls.Events.MANIFEST_PARSED, () => {
+            hls.startLoad(playhead)
+        })
+
+        hls.on(Hls.Events.LEVEL_LOADED, () => {
+            area.classList.remove('video-is-loading')
+            area.classList.add('video-is-loaded')
+        })
+
+        hls.on(Hls.Events.LEVEL_SWITCHED, () => {
+
+            let quality = $('.video-quality', area)
+            let level = hls.levels[hls.currentLevel]
+            let next = hls.currentLevel - 1
+
+            if (next < -1) {
+                next = hls.levels[hls.levels.length - 1]
+            }
+
+            quality.dataset.next = next
+            $('span', quality).innerText = level.height + 'p'
+
+        })
+
+        hls.once(Hls.Events.FRAG_LOADED, () => {
+            resolve(null)
+        })
+
+        hls.on(Hls.Events.ERROR, (_event: Event, data: any) => {
+
+            if (!data.fatal) {
+                return
+            }
+
+            switch (data.type) {
+                case Hls.ErrorTypes.OTHER_ERROR:
+                    hls.startLoad()
+                    break
+                case Hls.ErrorTypes.NETWORK_ERROR:
+                    if (data.details == 'manifestLoadError') {
+                        showError('Episode cannot be played because of CORS error. You must use a proxy.')
+                    } else {
+                        hls.startLoad()
+                    }
+                    break
+                case Hls.ErrorTypes.MEDIA_ERROR:
+                    showError('Media error: trying recovery...')
+                    hls.recoverMediaError()
+                    break
+                default:
+                    showError('Media cannot be recovered: ' + data.details)
+                    hls.destroy()
+                    break
+            }
+
+        })
+
+        hls.attachMedia(video)
+
+    })
 }
 
 /**
