@@ -338,194 +338,60 @@ const streamVideo: Callback = async ({ state }) => {
 
             area.classList.add('video-is-loading');
 
-            // Check if this is a DASH stream (MPD format)
+            // IMPORTANT: Check if we can get an HLS stream instead - usually better supported
+            // Let's try to modify the URL to request HLS instead of DASH
             if (stream.indexOf('.mpd') !== -1 || stream.indexOf('manifest.mpd') !== -1) {
-                console.log("Using WebOS 3.5 optimized playback for DASH content");
+                console.log("WEBOS 3.5 DASH PLAYBACK APPROACH");
                 
-                // Clean up any existing players
-                if (hls) {
-                    hls.destroy();
-                    hls = null;
-                }
-                if (dashPlayer) {
-                    dashPlayer.destroy();
-                    dashPlayer = null;
+                // Try to get an HLS version by modifying the URL
+                var possibleHlsUrl = null;
+                
+                // Some services allow format switching by changing the URL
+                if (stream.indexOf('format=dash') !== -1) {
+                    possibleHlsUrl = stream.replace('format=dash', 'format=hls');
+                } else if (stream.indexOf('.urlset/manifest.mpd') !== -1) {
+                    possibleHlsUrl = stream.replace('.urlset/manifest.mpd', '/master.m3u8');
+                } else if (stream.indexOf('.mpd') !== -1) {
+                    possibleHlsUrl = stream.replace('.mpd', '.m3u8');
                 }
                 
-                // Use simpler approach for WebOS 3.5
-                return await new Promise((resolve) => {
-                    // First, try direct playback with a modified URL
-                    if (stream.indexOf('.mp4') !== -1) {
-                        // Try to extract an MP4 URL from the stream URL
-                        console.log("Stream URL contains MP4 references");
-                        
-                        // SIMPLIFIED DIRECT EXTRACTION
-                        var directMp4Url = extractSimpleMp4Url(stream);
-                        
-                        if (directMp4Url) {
-                            console.log("Extracted direct MP4 URL:", directMp4Url);
-                            playMp4WithSimpleMethod(directMp4Url, accessToken, playhead, resolve);
-                            return;
-                        }
-                    }
+                // If we created a possible HLS URL, try to fetch it to verify
+                if (possibleHlsUrl) {
+                    console.log("Trying possible HLS URL:", possibleHlsUrl);
                     
-                    // If direct extraction failed, try fetching the manifest
-                    console.log("Fetching DASH manifest for WebOS 3.5");
-                    var xhr = new XMLHttpRequest();
-                    xhr.open('GET', stream, true);
-                    xhr.setRequestHeader('Authorization', 'Bearer ' + accessToken);
-                    
-                    xhr.onload = function() {
-                        if (xhr.status === 200) {
-                            // Try to find MP4 URL in the response
-                            var manifestText = xhr.responseText;
-                            console.log("Got manifest, length:", manifestText.length);
-                            
-                            // Try to extract MP4 URL from BaseURL tags
-                            var mp4Url = null;
-                            
-                            // Look for <BaseURL> tags
-                            var baseUrlPos = manifestText.indexOf('<BaseURL>');
-                            if (baseUrlPos !== -1) {
-                                var endPos = manifestText.indexOf('</BaseURL>', baseUrlPos);
-                                if (endPos !== -1) {
-                                    var baseUrl = manifestText.substring(baseUrlPos + 9, endPos);
-                                    console.log("Found BaseURL:", baseUrl);
-                                    
-                                    // Use this URL if it contains .mp4
-                                    if (baseUrl.indexOf('.mp4') !== -1) {
-                                        mp4Url = baseUrl;
-                                        
-                                        // Handle relative URLs
-                                        if (mp4Url.indexOf('http') !== 0) {
-                                            var streamBase = stream.substring(0, stream.lastIndexOf('/') + 1);
-                                            mp4Url = streamBase + mp4Url;
-                                        }
-                                    }
-                                }
-                            }
-                            
-                            if (mp4Url) {
-                                console.log("Using MP4 URL from manifest:", mp4Url);
-                                playMp4WithSimpleMethod(mp4Url, accessToken, playhead, resolve);
+                    return await new Promise((resolve) => {
+                        var hlsCheckXhr = new XMLHttpRequest();
+                        hlsCheckXhr.open('HEAD', possibleHlsUrl, true);
+                        hlsCheckXhr.setRequestHeader('Authorization', 'Bearer ' + accessToken);
+                        
+                        hlsCheckXhr.onload = function() {
+                            if (hlsCheckXhr.status === 200) {
+                                console.log("HLS version found! Using HLS stream instead of DASH");
+                                playHlsStream(possibleHlsUrl, accessToken, playhead, resolve);
                             } else {
-                                console.log("Could not find MP4 URL in manifest, trying legacy method");
-                                tryLegacyStreaming(videoId, playhead, resolve);
+                                console.log("HLS version not available, proceeding with improved DASH approach");
+                                tryImprovedDashToMp4(stream, accessToken, playhead, resolve);
                             }
-                        } else {
-                            console.error("Failed to fetch manifest:", xhr.status);
-                            tryLegacyStreaming(videoId, playhead, resolve);
-                        }
-                    };
-                    
-                    xhr.onerror = function() {
-                        console.error("XHR error fetching manifest");
-                        tryLegacyStreaming(videoId, playhead, resolve);
-                    };
-                    
-                    xhr.send();
-                });
+                        };
+                        
+                        hlsCheckXhr.onerror = function() {
+                            console.log("Error checking HLS URL, proceeding with DASH approach");
+                            tryImprovedDashToMp4(stream, accessToken, playhead, resolve);
+                        };
+                        
+                        hlsCheckXhr.send();
+                    });
+                } else {
+                    return await new Promise((resolve) => {
+                        tryImprovedDashToMp4(stream, accessToken, playhead, resolve);
+                    });
+                }
             } else {
                 // This is an HLS stream - use HLS.js
                 console.log("Using HLS.js for HLS stream");
                 
                 return await new Promise((resolve) => {
-                    if (!Hls.isSupported()) {
-                        throw Error('HLS format not supported.');
-                    }
-
-                    // Configure HLS.js
-                    hls = new Hls({
-                        autoStartLoad: false,
-                        startLevel: -1,
-                        maxBufferLength: 15,
-                        backBufferLength: 15,
-                        maxBufferSize: 30 * 1000 * 1000,
-                        maxFragLookUpTolerance: 0.2,
-                        nudgeMaxRetry: 10,
-                        xhrSetup: function(xhr, url) {
-                            xhr.setRequestHeader('Authorization', 'Bearer ' + accessToken);
-                            console.log("Added Authorization header to HLS request");
-                        }
-                    });
-
-                    // HLS events setup - unchanged
-                    hls.on(Hls.Events.MEDIA_ATTACHED, () => {
-                        console.log("HLS: media attached, loading source");
-                        hls.loadSource(stream);
-                    });
-
-                    // Rest of your HLS events - unchanged
-                    hls.on(Hls.Events.MANIFEST_PARSED, () => {
-                        console.log("HLS: manifest parsed, starting load from", playhead);
-                        hls.startLoad(playhead);
-                    });
-
-                    hls.on(Hls.Events.LEVEL_LOADED, () => {
-                        console.log("HLS: level loaded");
-                        playbackStarted = true;
-                        area.classList.remove('video-is-loading');
-                        area.classList.add('video-is-loaded');
-                    });
-
-                    hls.on(Hls.Events.LEVEL_SWITCHED, () => {
-                        let quality = $('.video-quality', area);
-                        let level = hls.levels[hls.currentLevel];
-                        let next = hls.currentLevel - 1;
-
-                        if (next < -1) {
-                            next = hls.levels.length - 1;
-                        }
-
-                        quality.dataset.next = next;
-                        $('span', quality).innerText = level.height + 'p';
-                    });
-
-                    hls.once(Hls.Events.FRAG_LOADED, () => {
-                        console.log("HLS: fragment loaded");
-                        resolve(null);
-                    });
-
-                    hls.on(Hls.Events.ERROR, (_event: Event, data: any) => {
-                        console.error("HLS error:", data);
-                        
-                        if (!data.fatal) {
-                            return;
-                        }
-
-                        switch (data.type) {
-                            case Hls.ErrorTypes.OTHER_ERROR:
-                                hls.startLoad();
-                                break;
-                            case Hls.ErrorTypes.NETWORK_ERROR:
-                                if (data.details === 'manifestLoadError') {
-                                    showError('Episode cannot be played because of CORS error or invalid token: ' + 
-                                             (data.response ? data.response.code : 'unknown'));
-                                } else {
-                                    hls.startLoad();
-                                }
-                                break;
-                            case Hls.ErrorTypes.MEDIA_ERROR:
-                                showError('Media error: trying recovery...');
-                                hls.recoverMediaError();
-                                break;
-                            default:
-                                showError('Media cannot be recovered: ' + data.details);
-                                hls.destroy();
-                                break;
-                        }
-                    });
-
-                    // Attach media
-                    console.log("Attaching media to HLS.js");
-                    hls.attachMedia(video);
-                    
-                    streamTimeout = setTimeout(() => {
-                        if (!playbackStarted) {
-                            console.log("HLS playback failed to start, trying legacy streaming");
-                            tryLegacyStreaming(videoId, playhead, resolve);
-                        }
-                    }, 15000) as unknown as number;
+                    playHlsStream(stream, accessToken, playhead, resolve);
                 });
             }
         } else {
@@ -543,121 +409,359 @@ const streamVideo: Callback = async ({ state }) => {
 };
 
 /**
- * Extract MP4 URL using simple string methods for compatibility
+ * Try improved DASH to MP4 conversion
  */
-function extractSimpleMp4Url(streamUrl) {
-    try {
-        console.log("Extracting MP4 URL with simple method");
-        
-        // Check for the typical Crunchyroll pattern like url_,file1.mp4,file2.mp4,
-        var underscoreCommaPos = streamUrl.indexOf('_,');
-        if (underscoreCommaPos !== -1) {
-            console.log("Found URL with underscore-comma pattern");
+function tryImprovedDashToMp4(stream, accessToken, playhead, resolve) {
+    // Clean up any existing players
+    if (hls) {
+        hls.destroy();
+        hls = null;
+    }
+    if (dashPlayer) {
+        dashPlayer.destroy();
+        dashPlayer = null;
+    }
+    
+    console.log("Attempting improved DASH to MP4 extraction");
+    
+    // First, fetch the actual MPD content to analyze the structure
+    var xhr = new XMLHttpRequest();
+    xhr.open('GET', stream, true);
+    xhr.setRequestHeader('Authorization', 'Bearer ' + accessToken);
+    
+    xhr.onload = function() {
+        if (xhr.status === 200) {
+            var mpd = xhr.responseText;
+            console.log("Got MPD content, length:", mpd.length);
             
-            // Get the base URL part
-            var baseUrl = streamUrl.substring(0, underscoreCommaPos + 2);
+            // Log part of the MPD for debugging
+            console.log("MPD snippet:", mpd.substring(0, 300));
             
-            // Find the .mp4 instances
-            var remainingUrl = streamUrl.substring(underscoreCommaPos + 2);
-            var mp4Files = [];
-            var lastIndex = 0;
-            var mp4Index = remainingUrl.indexOf('.mp4', lastIndex);
+            // Look for akamaized URLs which are typically direct CDN links
+            var akamaizedMatch = mpd.match(/https:\/\/[^"']+akamaized\.net[^"']+\.mp4/);
+            if (akamaizedMatch) {
+                var akamaizedUrl = akamaizedMatch[0];
+                console.log("Found Akamaized URL:", akamaizedUrl);
+                
+                // Try playing with the Akamaized URL directly
+                playWithDirectUrl(akamaizedUrl, accessToken, playhead, resolve);
+                return;
+            }
             
-            while (mp4Index !== -1) {
-                // Get the start of the filename
-                var startPos = remainingUrl.lastIndexOf(',', mp4Index);
-                if (startPos !== -1) {
-                    var mp4File = remainingUrl.substring(startPos + 1, mp4Index + 4);
-                    mp4Files.push(mp4File);
+            // Look for direct segment references in the URL first
+            if (stream.indexOf('.mp4') !== -1) {
+                var parts = stream.split('_,');
+                if (parts.length > 1) {
+                    var urlBasePrefix = parts[0] + '_';
+                    var segments = parts[1].split(',');
+                    
+                    var mp4Segments = [];
+                    for (var i = 0; i < segments.length; i++) {
+                        if (segments[i].indexOf('.mp4') !== -1) {
+                            mp4Segments.push(segments[i].split(',')[0]);
+                        }
+                    }
+                    
+                    if (mp4Segments.length > 0) {
+                        // Find a better quality segment - second or third is usually good
+                        var segmentIndex = Math.min(1, mp4Segments.length - 1); 
+                        var directUrl = urlBasePrefix + mp4Segments[segmentIndex];
+                        
+                        console.log("USING DIRECT SEGMENT:", directUrl);
+                        
+                        // The correct approach: Change '.mp4,' to just '.mp4'
+                        directUrl = directUrl.replace('.mp4,', '.mp4');
+                        
+                        // Try to play this direct URL
+                        playWithDirectUrl(directUrl, accessToken, playhead, resolve);
+                        return;
+                    }
+                }
+            }
+            
+            // If we can't extract from the URL, look for initialization segments in the MPD
+            var initSegmentMatch = mpd.match(/initialization="([^"]+)"/);
+            if (initSegmentMatch) {
+                var initSegment = initSegmentMatch[1];
+                console.log("Found initialization segment:", initSegment);
+                
+                // Construct the full URL if it's relative
+                var fullInitUrl = initSegment;
+                if (initSegment.indexOf('http') !== 0) {
+                    var pathBase = stream.substring(0, stream.lastIndexOf('/') + 1);
+                    fullInitUrl = pathBase + initSegment;
                 }
                 
-                lastIndex = mp4Index + 4;
-                mp4Index = remainingUrl.indexOf('.mp4', lastIndex);
+                console.log("Trying initialization segment URL:", fullInitUrl);
+                playWithDirectUrl(fullInitUrl, accessToken, playhead, resolve);
+                return;
             }
             
-            console.log("Found MP4 files:", mp4Files.join(', '));
-            
-            if (mp4Files.length > 0) {
-                // Choose a mid-quality segment (second file is often good)
-                var selectedIndex = Math.min(1, mp4Files.length - 1);
-                var mp4Url = baseUrl + mp4Files[selectedIndex];
-                return mp4Url;
-            }
+            // Last resort: Try to convert to HLS if possible
+            tryModifiedHlsUrl(stream, accessToken, playhead, resolve);
+        } else {
+            console.error("Failed to fetch MPD:", xhr.status);
+            tryLegacyStreaming(null, playhead, resolve);
+        }
+    };
+    
+    xhr.onerror = function() {
+        console.error("Error fetching MPD");
+        tryLegacyStreaming(null, playhead, resolve);
+    };
+    
+    xhr.send();
+}
+
+/**
+ * Try to play with a direct URL
+ */
+function playWithDirectUrl(url, accessToken, playhead, resolve) {
+    console.log("Playing with direct URL:", url);
+    
+    // Clear video element
+    video.pause();
+    video.removeAttribute('src');
+    video.removeAttribute('type');
+    video.load();
+    
+    // Create a special video source tag with custom request headers
+    var source = document.createElement('source');
+    source.src = url;
+    source.type = 'video/mp4';
+    
+    // Add authorization via DOM element
+    var meta = document.createElement('meta');
+    meta.setAttribute('httpEquiv', 'Authorization');
+    meta.setAttribute('content', 'Bearer ' + accessToken);
+    document.head.appendChild(meta);
+    
+    // Set up video
+    video.appendChild(source);
+    
+    if (playhead > 0) {
+        video.currentTime = playhead;
+    }
+    
+    // Track success/failure
+    var successHandler = function() {
+        console.log("Direct URL playback started!");
+        video.removeEventListener('playing', successHandler);
+        video.removeEventListener('error', errorHandler);
+        
+        if (streamTimeout !== null) {
+            clearTimeout(streamTimeout);
+            streamTimeout = null;
         }
         
-        return null;
+        playbackStarted = true;
+        area.classList.remove('video-is-loading');
+        area.classList.add('video-is-loaded');
+        resolve(null);
+    };
+    
+    var errorHandler = function() {
+        console.error("Direct URL playback error:", video.error);
+        video.removeEventListener('playing', successHandler);
+        video.removeEventListener('error', errorHandler);
+        
+        if (streamTimeout !== null) {
+            clearTimeout(streamTimeout);
+            streamTimeout = null;
+        }
+        
+        tryModifiedHlsUrl(url, accessToken, playhead, resolve);
+    };
+    
+    video.addEventListener('playing', successHandler);
+    video.addEventListener('error', errorHandler);
+    
+    // Set timeout for fallback
+    streamTimeout = setTimeout(function() {
+        if (!playbackStarted) {
+            console.log("Direct URL playback timeout");
+            video.removeEventListener('playing', successHandler);
+            video.removeEventListener('error', errorHandler);
+            tryModifiedHlsUrl(url, accessToken, playhead, resolve);
+        }
+    }, 10000);
+    
+    // Start playback
+    video.load();
+    try {
+        video.play();
     } catch (e) {
-        console.error("Error in simple MP4 extraction:", e);
-        return null;
+        console.error("Error playing video:", e);
+        errorHandler();
     }
 }
 
 /**
- * Play MP4 with a simple method for WebOS 3.5 compatibility
+ * Try using a modified HLS URL as last resort
  */
-function playMp4WithSimpleMethod(mp4Url, accessToken, playhead, resolve) {
-    try {
-        console.log("Playing MP4 with simple method:", mp4Url);
+function tryModifiedHlsUrl(url, accessToken, playhead, resolve) {
+    console.log("Trying to create an HLS URL from:", url);
+    
+    var hlsUrl = url;
+    
+    // Try various URL transformations
+    if (url.indexOf('.mpd') !== -1) {
+        hlsUrl = url.replace('.mpd', '.m3u8');
+    } else if (url.indexOf('format=dash') !== -1) {
+        hlsUrl = url.replace('format=dash', 'format=hls');
+    } else if (url.indexOf('dash') !== -1) {
+        hlsUrl = url.replace('dash', 'hls');
+    }
+    
+    if (hlsUrl !== url) {
+        console.log("Created possible HLS URL:", hlsUrl);
         
-        // Clear video element
-        video.pause();
-        video.removeAttribute('src');
-        video.removeAttribute('type');
-        video.load();
-        
-        // Try to set up auth header
-        var meta = document.createElement('meta');
-        meta.httpEquiv = 'Authorization';
-        meta.content = 'Bearer ' + accessToken;
-        document.head.appendChild(meta);
-        
-        // Set video source
-        video.src = mp4Url;
-        
-        // Set playhead position
-        if (playhead > 0) {
-            video.currentTime = playhead;
+        // Check if this URL is accessible
+        var checkXhr = new XMLHttpRequest();
+        checkXhr.open('HEAD', hlsUrl, true);
+        if (accessToken) {
+            checkXhr.setRequestHeader('Authorization', 'Bearer ' + accessToken);
         }
         
-        // Load and play
-        video.load();
-        video.play();
-        
-        // Check if playback starts
-        var playbackTimeout = setTimeout(function() {
-            if (!playbackStarted) {
-                console.log("MP4 playback failed to start within 8 seconds");
+        checkXhr.onload = function() {
+            if (checkXhr.status === 200) {
+                console.log("Modified HLS URL works! Using HLS stream");
+                playHlsStream(hlsUrl, accessToken, playhead, resolve);
+            } else {
+                console.log("Modified HLS URL failed, falling back to legacy");
                 tryLegacyStreaming(null, playhead, resolve);
             }
-        }, 8000);
-        
-        // Listen for successful playback
-        var playingHandler = function() {
-            console.log("MP4 playback started!");
-            clearTimeout(playbackTimeout);
-            video.removeEventListener('playing', playingHandler);
-            playbackStarted = true;
-            area.classList.remove('video-is-loading');
-            area.classList.add('video-is-loaded');
-            resolve(null);
         };
         
-        video.addEventListener('playing', playingHandler);
-        
-        // Handle errors
-        var errorHandler = function() {
-            console.error("MP4 playback error:", video.error);
-            clearTimeout(playbackTimeout);
-            video.removeEventListener('error', errorHandler);
+        checkXhr.onerror = function() {
+            console.log("Error checking modified HLS URL, falling back to legacy");
             tryLegacyStreaming(null, playhead, resolve);
         };
         
-        video.addEventListener('error', errorHandler);
-        
-    } catch (e) {
-        console.error("Error in MP4 playback setup:", e);
+        checkXhr.send();
+    } else {
+        console.log("Could not create a valid HLS URL, falling back to legacy");
         tryLegacyStreaming(null, playhead, resolve);
     }
+}
+
+/**
+ * Play an HLS stream
+ */
+function playHlsStream(stream, accessToken, playhead, resolve) {
+    if (!Hls.isSupported()) {
+        console.error("HLS.js not supported on this device");
+        tryLegacyStreaming(null, playhead, resolve);
+        return;
+    }
+
+    console.log("Playing HLS stream:", stream.substring(0, 100) + "...");
+    
+    // Clean up any existing players
+    if (hls) {
+        hls.destroy();
+        hls = null;
+    }
+    if (dashPlayer) {
+        dashPlayer.destroy();
+        dashPlayer = null;
+    }
+    
+    // Configure HLS.js
+    hls = new Hls({
+        autoStartLoad: false,
+        startLevel: -1,
+        maxBufferLength: 15,
+        backBufferLength: 15,
+        maxBufferSize: 30 * 1000 * 1000,
+        maxFragLookUpTolerance: 0.2,
+        nudgeMaxRetry: 10,
+        // Critical for WebOS 3.5 - add auth headers
+        xhrSetup: function(xhr, url) {
+            if (accessToken) {
+                xhr.setRequestHeader('Authorization', 'Bearer ' + accessToken);
+                console.log("Added Authorization header to HLS request");
+            }
+        }
+    });
+
+    // Set up HLS events
+    hls.on(Hls.Events.MEDIA_ATTACHED, function() {
+        console.log("HLS: media attached, loading source");
+        hls.loadSource(stream);
+    });
+
+    hls.on(Hls.Events.MANIFEST_PARSED, function() {
+        console.log("HLS: manifest parsed, starting load from", playhead);
+        hls.startLoad(playhead);
+    });
+
+    hls.on(Hls.Events.LEVEL_LOADED, function() {
+        console.log("HLS: level loaded");
+        playbackStarted = true;
+        area.classList.remove('video-is-loading');
+        area.classList.add('video-is-loaded');
+    });
+
+    hls.on(Hls.Events.LEVEL_SWITCHED, function() {
+        var quality = $('.video-quality', area);
+        var level = hls.levels[hls.currentLevel];
+        var next = hls.currentLevel - 1;
+
+        if (next < -1) {
+            next = hls.levels.length - 1;
+        }
+
+        quality.dataset.next = next;
+        $('span', quality).innerText = level.height + 'p';
+    });
+
+    hls.once(Hls.Events.FRAG_LOADED, function() {
+        console.log("HLS: fragment loaded");
+        resolve(null);
+    });
+
+    hls.on(Hls.Events.ERROR, function(_event, data) {
+        console.error("HLS error:", data);
+        
+        if (!data.fatal) {
+            return;
+        }
+
+        switch (data.type) {
+            case Hls.ErrorTypes.OTHER_ERROR:
+                hls.startLoad();
+                break;
+            case Hls.ErrorTypes.NETWORK_ERROR:
+                if (data.details === 'manifestLoadError') {
+                    console.error("HLS manifest load error");
+                    tryLegacyStreaming(null, playhead, resolve);
+                } else {
+                    hls.startLoad();
+                }
+                break;
+            case Hls.ErrorTypes.MEDIA_ERROR:
+                console.log("HLS media error, trying recovery");
+                hls.recoverMediaError();
+                break;
+            default:
+                console.error("HLS fatal error:", data.details);
+                tryLegacyStreaming(null, playhead, resolve);
+                break;
+        }
+    });
+
+    // Attach media
+    console.log("Attaching media to HLS player");
+    hls.attachMedia(video);
+    
+    // Set timeout for fallback
+    streamTimeout = setTimeout(function() {
+        if (!playbackStarted) {
+            console.log("HLS playback failed to start, trying legacy");
+            tryLegacyStreaming(null, playhead, resolve);
+        }
+    }, 15000);
 }
 
 /**
