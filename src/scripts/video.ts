@@ -514,11 +514,45 @@ function tryImprovedDashToMp4(stream, accessToken, playhead, resolve) {
 }
 
 /**
- * Try to play with a direct URL
+ * Try to play with a direct URL 
  */
 function playWithDirectUrl(url, accessToken, playhead, resolve) {
     console.log("Playing with direct URL:", url);
     
+    // IMPORTANT FIX: Process multi-segment Akamaized URLs properly
+    if (url.indexOf('_,') !== -1 && url.indexOf('.mp4,') !== -1) {
+        console.log("Detected multi-segment URL - extracting single segment");
+        
+        // Extract the base part and pick one segment
+        var baseUrlPart = url.substring(0, url.indexOf('_,') + 2); // Include the '_,'
+        var segmentsPart = url.substring(url.indexOf('_,') + 2);
+        var segments = segmentsPart.split(',');
+        
+        // Find MP4 segments
+        var mp4Segments = [];
+        for (var i = 0; i < segments.length; i++) {
+            if (segments[i].indexOf('.mp4') !== -1) {
+                mp4Segments.push(segments[i]);
+            }
+        }
+        
+        if (mp4Segments.length > 0) {
+            // Choose a medium quality segment (often 2nd or 3rd is good)
+            // The segments are usually in quality order
+            var chosenIndex = Math.min(1, mp4Segments.length - 1);
+            
+            // Create clean URL for the chosen segment
+            url = baseUrlPart + mp4Segments[chosenIndex];
+            console.log("Selected single MP4 segment:", url);
+            
+            // Fix URL ending if needed (remove any trailing commas)
+            if (url.indexOf('.mp4,') !== -1) {
+                url = url.replace('.mp4,', '.mp4');
+            }
+        }
+    }
+    
+    // Rest of the function remains the same...
     // Clear video element
     video.pause();
     video.removeAttribute('src');
