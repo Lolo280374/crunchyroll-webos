@@ -123,6 +123,9 @@ console.log("Test response:", testResponse.error ? "Error" : "Success");
     const episodeNumber = episodeMetadata.episode_number || episodeMetadata.episode;
     const episodeName = episodeInfo.title;
 
+    // Update the document title with the anime name
+    document.title = `Crunchyroll - ${serieName} S${seasonNumber}E${episodeNumber}`;
+
     // Log the entire episode response to find the right format
     console.log("Full episode response:", JSON.stringify(episodeInfo));
 
@@ -1070,6 +1073,8 @@ const onRender: Callback = async (component) => {
  * @param component
  */
 const onDestroy: Callback = ({ element }) => {
+
+    document.title = 'Crunchyroll';
 
     off(element, 'click', '.video-close')
     off(element, 'click', '.video-quality')
