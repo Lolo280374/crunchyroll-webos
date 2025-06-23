@@ -339,7 +339,7 @@ const streamVideo: Callback = async ({ state }) => {
             area.classList.add('video-is-loading');
 
             // Check if this is a DASH stream (MPD format)
-            if (stream.includes('.mpd') || stream.includes('manifest.mpd')) {
+            if (stream.indexOf('.mpd') !== -1 || stream.indexOf('manifest.mpd') !== -1) {
                 console.log("Using WebOS 3.5 optimized playback for DASH content");
                 
                 // Clean up any existing players
@@ -352,30 +352,74 @@ const streamVideo: Callback = async ({ state }) => {
                     dashPlayer = null;
                 }
                 
-                // Use MP4 extraction approach for DASH streams
+                // Use simpler approach for WebOS 3.5
                 return await new Promise((resolve) => {
-                    // First, try to fetch the manifest to get content info
-                    console.log("Fetching DASH manifest with auth token");
-                    const xhr = new XMLHttpRequest();
+                    // First, try direct playback with a modified URL
+                    if (stream.indexOf('.mp4') !== -1) {
+                        // Try to extract an MP4 URL from the stream URL
+                        console.log("Stream URL contains MP4 references");
+                        
+                        // SIMPLIFIED DIRECT EXTRACTION
+                        var directMp4Url = extractSimpleMp4Url(stream);
+                        
+                        if (directMp4Url) {
+                            console.log("Extracted direct MP4 URL:", directMp4Url);
+                            playMp4WithSimpleMethod(directMp4Url, accessToken, playhead, resolve);
+                            return;
+                        }
+                    }
+                    
+                    // If direct extraction failed, try fetching the manifest
+                    console.log("Fetching DASH manifest for WebOS 3.5");
+                    var xhr = new XMLHttpRequest();
                     xhr.open('GET', stream, true);
                     xhr.setRequestHeader('Authorization', 'Bearer ' + accessToken);
-                    xhr.responseType = 'text';
                     
                     xhr.onload = function() {
                         if (xhr.status === 200) {
-                            const manifestText = xhr.responseText;
-                            console.log("Successfully fetched DASH manifest");
+                            // Try to find MP4 URL in the response
+                            var manifestText = xhr.responseText;
+                            console.log("Got manifest, length:", manifestText.length);
                             
-                            // Look for direct MP4 segments in the manifest
-                            extractMp4UrlFromManifest(manifestText, stream, accessToken, playhead, resolve);
+                            // Try to extract MP4 URL from BaseURL tags
+                            var mp4Url = null;
+                            
+                            // Look for <BaseURL> tags
+                            var baseUrlPos = manifestText.indexOf('<BaseURL>');
+                            if (baseUrlPos !== -1) {
+                                var endPos = manifestText.indexOf('</BaseURL>', baseUrlPos);
+                                if (endPos !== -1) {
+                                    var baseUrl = manifestText.substring(baseUrlPos + 9, endPos);
+                                    console.log("Found BaseURL:", baseUrl);
+                                    
+                                    // Use this URL if it contains .mp4
+                                    if (baseUrl.indexOf('.mp4') !== -1) {
+                                        mp4Url = baseUrl;
+                                        
+                                        // Handle relative URLs
+                                        if (mp4Url.indexOf('http') !== 0) {
+                                            var streamBase = stream.substring(0, stream.lastIndexOf('/') + 1);
+                                            mp4Url = streamBase + mp4Url;
+                                        }
+                                    }
+                                }
+                            }
+                            
+                            if (mp4Url) {
+                                console.log("Using MP4 URL from manifest:", mp4Url);
+                                playMp4WithSimpleMethod(mp4Url, accessToken, playhead, resolve);
+                            } else {
+                                console.log("Could not find MP4 URL in manifest, trying legacy method");
+                                tryLegacyStreaming(videoId, playhead, resolve);
+                            }
                         } else {
-                            console.error("Failed to fetch DASH manifest:", xhr.status);
+                            console.error("Failed to fetch manifest:", xhr.status);
                             tryLegacyStreaming(videoId, playhead, resolve);
                         }
                     };
                     
                     xhr.onerror = function() {
-                        console.error("Network error when fetching DASH manifest");
+                        console.error("XHR error fetching manifest");
                         tryLegacyStreaming(videoId, playhead, resolve);
                     };
                     
@@ -405,19 +449,23 @@ const streamVideo: Callback = async ({ state }) => {
                         }
                     });
 
-                    // HLS events setup
+                    // HLS events setup - unchanged
                     hls.on(Hls.Events.MEDIA_ATTACHED, () => {
+                        console.log("HLS: media attached, loading source");
                         hls.loadSource(stream);
                     });
 
+                    // Rest of your HLS events - unchanged
                     hls.on(Hls.Events.MANIFEST_PARSED, () => {
+                        console.log("HLS: manifest parsed, starting load from", playhead);
                         hls.startLoad(playhead);
                     });
 
                     hls.on(Hls.Events.LEVEL_LOADED, () => {
+                        console.log("HLS: level loaded");
+                        playbackStarted = true;
                         area.classList.remove('video-is-loading');
                         area.classList.add('video-is-loaded');
-                        playbackStarted = true;
                     });
 
                     hls.on(Hls.Events.LEVEL_SWITCHED, () => {
@@ -468,7 +516,7 @@ const streamVideo: Callback = async ({ state }) => {
                         }
                     });
 
-                    // Attach media and set timeout for fallback
+                    // Attach media
                     console.log("Attaching media to HLS.js");
                     hls.attachMedia(video);
                     
@@ -495,138 +543,61 @@ const streamVideo: Callback = async ({ state }) => {
 };
 
 /**
- * Helper function to extract MP4 URL from DASH manifest
+ * Extract MP4 URL using simple string methods for compatibility
  */
-function extractMp4UrlFromManifest(manifestText: string, streamUrl: string, accessToken: string, playhead: number, resolve: Function) {
+function extractSimpleMp4Url(streamUrl) {
     try {
-        console.log("Analyzing manifest to extract MP4 URLs");
+        console.log("Extracting MP4 URL with simple method");
         
-        // Check if the stream URL contains MP4 segments we can extract directly
-        if (streamUrl.includes('.mp4,')) {
-            console.log("Stream URL contains MP4 segments, extracting...");
+        // Check for the typical Crunchyroll pattern like url_,file1.mp4,file2.mp4,
+        var underscoreCommaPos = streamUrl.indexOf('_,');
+        if (underscoreCommaPos !== -1) {
+            console.log("Found URL with underscore-comma pattern");
             
-            // First approach: Split by comma-separated MP4 files
-            const segmentMatch = streamUrl.match(/.*_,([^,]+\.mp4),([^,]+\.mp4),([^,]+\.mp4),([^,]+\.mp4),([^,]+\.mp4),/);
+            // Get the base URL part
+            var baseUrl = streamUrl.substring(0, underscoreCommaPos + 2);
             
-            if (segmentMatch) {
-                // We found MP4 segments in the URL
-                console.log("Found MP4 segments in URL pattern");
-                
-                // Extract base URL (everything before the first MP4 filename)
-                const baseUrlEnd = streamUrl.indexOf('_,');
-                if (baseUrlEnd > 0) {
-                    const baseUrl = streamUrl.substring(0, baseUrlEnd + 2); // Include '_,' in the base URL
-                    
-                    // Pick middle quality segment (usually the best for older devices)
-                    const mp4Segments = [];
-                    for (let i = 1; i < segmentMatch.length; i++) {
-                        if (segmentMatch[i] && segmentMatch[i].endsWith('.mp4')) {
-                            mp4Segments.push(segmentMatch[i]);
-                        }
-                    }
-                    
-                    if (mp4Segments.length > 0) {
-                        // Select a middle-quality segment
-                        const selectedSegment = mp4Segments[Math.floor(mp4Segments.length / 2)];
-                        const mp4Url = baseUrl + selectedSegment;
-                        
-                        console.log("Extracted direct MP4 URL:", mp4Url);
-                        playMp4Directly(mp4Url, accessToken, playhead, resolve);
-                        return;
-                    }
-                }
-            }
-        }
-        
-        // Second approach: Look for BaseURL elements in the manifest
-        const baseUrlMatches = manifestText.match(/<BaseURL>([^<]+)<\/BaseURL>/g);
-        if (baseUrlMatches && baseUrlMatches.length) {
-            console.log("Found BaseURL elements in manifest");
+            // Find the .mp4 instances
+            var remainingUrl = streamUrl.substring(underscoreCommaPos + 2);
+            var mp4Files = [];
+            var lastIndex = 0;
+            var mp4Index = remainingUrl.indexOf('.mp4', lastIndex);
             
-            let bestUrl = '';
-            
-            // Extract the URLs from the BaseURL tags
-            for (const match of baseUrlMatches) {
-                const urlMatch = match.match(/<BaseURL>([^<]+)<\/BaseURL>/);
-                if (urlMatch && urlMatch[1]) {
-                    const url = urlMatch[1];
-                    if (url.includes('.mp4')) {
-                        bestUrl = url;
-                        break;
-                    }
-                }
-            }
-            
-            if (bestUrl) {
-                // If the URL is relative, resolve against manifest URL
-                if (!bestUrl.startsWith('http')) {
-                    const baseUrl = streamUrl.substring(0, streamUrl.lastIndexOf('/') + 1);
-                    bestUrl = baseUrl + bestUrl;
+            while (mp4Index !== -1) {
+                // Get the start of the filename
+                var startPos = remainingUrl.lastIndexOf(',', mp4Index);
+                if (startPos !== -1) {
+                    var mp4File = remainingUrl.substring(startPos + 1, mp4Index + 4);
+                    mp4Files.push(mp4File);
                 }
                 
-                console.log("Using MP4 URL from BaseURL:", bestUrl);
-                playMp4Directly(bestUrl, accessToken, playhead, resolve);
-                return;
+                lastIndex = mp4Index + 4;
+                mp4Index = remainingUrl.indexOf('.mp4', lastIndex);
             }
-        }
-        
-        // Third approach: Look for SegmentTemplate elements with media attributes
-        const segmentTemplateMatch = manifestText.match(/media="([^"]+\.mp4)/);
-        if (segmentTemplateMatch && segmentTemplateMatch[1]) {
-            const mediaPattern = segmentTemplateMatch[1];
-            console.log("Found media pattern:", mediaPattern);
             
-            // Handle template with $Number$ or similar variables
-            if (mediaPattern.includes('$')) {
-                // Replace $Number$ with 1 (first segment)
-                const mp4Url = mediaPattern.replace(/\$Number\$/g, '1')
-                                         .replace(/\$Time\$/g, '0')
-                                         .replace(/\$Bandwidth\$/g, '800000');
-                
-                // If relative URL, resolve against manifest URL
-                const fullMp4Url = mp4Url.startsWith('http') ? mp4Url : 
-                    streamUrl.substring(0, streamUrl.lastIndexOf('/') + 1) + mp4Url;
-                    
-                console.log("Constructed MP4 URL from template:", fullMp4Url);
-                playMp4Directly(fullMp4Url, accessToken, playhead, resolve);
-                return;
+            console.log("Found MP4 files:", mp4Files.join(', '));
+            
+            if (mp4Files.length > 0) {
+                // Choose a mid-quality segment (second file is often good)
+                var selectedIndex = Math.min(1, mp4Files.length - 1);
+                var mp4Url = baseUrl + mp4Files[selectedIndex];
+                return mp4Url;
             }
         }
         
-        // Fourth approach: Look for direct MP4 references in the manifest
-        const mp4Reference = manifestText.match(/https?:\/\/[^"'\s]+\.mp4/);
-        if (mp4Reference) {
-            console.log("Found direct MP4 reference in manifest:", mp4Reference[0]);
-            playMp4Directly(mp4Reference[0], accessToken, playhead, resolve);
-            return;
-        }
-        
-        // If we get here, we couldn't extract an MP4 URL
-        console.log("Could not extract MP4 URL from manifest, trying legacy streaming");
-        tryLegacyStreaming(null, playhead, resolve);
-        
-    } catch (error) {
-        console.error("Error extracting MP4 URL from manifest:", error);
-        tryLegacyStreaming(null, playhead, resolve);
+        return null;
+    } catch (e) {
+        console.error("Error in simple MP4 extraction:", e);
+        return null;
     }
 }
 
 /**
- * Helper function to play MP4 directly
+ * Play MP4 with a simple method for WebOS 3.5 compatibility
  */
-function playMp4Directly(mp4Url: string, accessToken: string, playhead: number, resolve: Function) {
+function playMp4WithSimpleMethod(mp4Url, accessToken, playhead, resolve) {
     try {
-        console.log("Setting up direct MP4 playback with URL:", mp4Url);
-        
-        // Clear any active players
-        if (hls) {
-            hls.destroy();
-            hls = null;
-        }
-        if (dashPlayer) {
-            dashPlayer.destroy();
-            dashPlayer = null;
-        }
+        console.log("Playing MP4 with simple method:", mp4Url);
         
         // Clear video element
         video.pause();
@@ -634,75 +605,57 @@ function playMp4Directly(mp4Url: string, accessToken: string, playhead: number, 
         video.removeAttribute('type');
         video.load();
         
-        // Setup HTTP headers for authorization
-        const meta = document.createElement('meta');
+        // Try to set up auth header
+        var meta = document.createElement('meta');
         meta.httpEquiv = 'Authorization';
         meta.content = 'Bearer ' + accessToken;
         document.head.appendChild(meta);
         
         // Set video source
-        video.setAttribute('type', 'video/mp4');
         video.src = mp4Url;
         
-        // Set playhead if needed
+        // Set playhead position
         if (playhead > 0) {
             video.currentTime = playhead;
         }
         
-        // Start playback - handle the case where play() might not return a promise on WebOS 3.5
+        // Load and play
         video.load();
+        video.play();
         
-        try {
-            const playPromise = video.play();
-            // Check if play returns a promise (modern browsers)
-            if (playPromise !== undefined && typeof playPromise.then === 'function') {
-                playPromise.then(() => {
-                    console.log("MP4 playback started successfully");
-                }).catch(error => {
-                    console.error("MP4 playback promise rejected:", error);
-                    tryLegacyStreaming(null, playhead, resolve);
-                });
-            } else {
-                console.log("Play didn't return a promise - legacy browser behavior");
-                // Old browser behavior - no promise returned
-            }
-        } catch (playError) {
-            console.error("Error calling play():", playError);
-            tryLegacyStreaming(null, playhead, resolve);
-        }
-        
-        // Set timeout for fallback if playback doesn't start
-        streamTimeout = setTimeout(() => {
+        // Check if playback starts
+        var playbackTimeout = setTimeout(function() {
             if (!playbackStarted) {
-                console.log("MP4 playback failed to start, trying legacy streaming");
+                console.log("MP4 playback failed to start within 8 seconds");
                 tryLegacyStreaming(null, playhead, resolve);
             }
-        }, 8000) as unknown as number;
+        }, 8000);
         
-        // Handle successful playback
-        video.addEventListener('playing', function onPlaying() {
-            console.log("MP4 video is now playing");
-            if (streamTimeout) {
-                clearTimeout(streamTimeout);
-                streamTimeout = null;
-            }
-            video.removeEventListener('playing', onPlaying);
+        // Listen for successful playback
+        var playingHandler = function() {
+            console.log("MP4 playback started!");
+            clearTimeout(playbackTimeout);
+            video.removeEventListener('playing', playingHandler);
+            playbackStarted = true;
+            area.classList.remove('video-is-loading');
+            area.classList.add('video-is-loaded');
             resolve(null);
-        });
+        };
+        
+        video.addEventListener('playing', playingHandler);
         
         // Handle errors
-        video.addEventListener('error', function onError() {
+        var errorHandler = function() {
             console.error("MP4 playback error:", video.error);
-            if (streamTimeout) {
-                clearTimeout(streamTimeout);
-                streamTimeout = null;
-            }
-            video.removeEventListener('error', onError);
+            clearTimeout(playbackTimeout);
+            video.removeEventListener('error', errorHandler);
             tryLegacyStreaming(null, playhead, resolve);
-        });
+        };
         
-    } catch (error) {
-        console.error("Error in direct MP4 playback setup:", error);
+        video.addEventListener('error', errorHandler);
+        
+    } catch (e) {
+        console.error("Error in MP4 playback setup:", e);
         tryLegacyStreaming(null, playhead, resolve);
     }
 }
@@ -710,7 +663,8 @@ function playMp4Directly(mp4Url: string, accessToken: string, playhead: number, 
 /**
  * Function to try the legacy API approach
  */
-function tryLegacyStreaming(videoId: string | null, playhead: number, resolve: Function) {
+function tryLegacyStreaming(videoId, playhead, resolve) {
+    // Clear any existing timeout
     if (streamTimeout !== null) {
         clearTimeout(streamTimeout);
         streamTimeout = null;
@@ -724,7 +678,8 @@ function tryLegacyStreaming(videoId: string | null, playhead: number, resolve: F
         return;
     }
     
-    // Implement legacy streaming here
+    // Use your existing legacy streaming code here
+    // This is the same as your original implementation
     (async () => {
         try {
             console.log("Fetching stream info from legacy API");
@@ -790,7 +745,7 @@ function tryLegacyStreaming(videoId: string | null, playhead: number, resolve: F
                 nudgeMaxRetry: 10
             });
 
-            // Set up HLS events
+            // Set up HLS events 
             hls.on(Hls.Events.MEDIA_ATTACHED, () => {
                 hls.loadSource(stream);
             });
