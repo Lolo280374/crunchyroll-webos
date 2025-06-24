@@ -27,7 +27,7 @@ jobs:
       - name: Clone source repositories
         run: |
           cd ~/webos-crunchy-test
-          git clone https://github.com/Lolo280374/crunchyroll-webos --recursive --single-branch --branch=master --depth 3
+          git clone https://github.com/Lolo280374/crunchyroll-webos --recursive --single-branch --branch=stream --depth 3
           git clone https://github.com/ediaz23/crunchyroll-webos-service --single-branch --branch=master --depth 3
           git clone https://github.com/ediaz23/crunchyroll-webos-server --single-branch --branch=master --depth 3
 
