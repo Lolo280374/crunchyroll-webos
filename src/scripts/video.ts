@@ -553,11 +553,27 @@ function setupDrmForWebOS(videoElement, streamUrl, accessToken, playhead, resolv
         // Create the DASH player
         dashPlayer = window.dashjs.MediaPlayer().create();
         
-        // Extract content ID and token from URL
-        const urlParams = new URL(streamUrl).searchParams;
-        const contentId = urlParams.get('playbackGuid')?.split('-')[1] || '';
-        const accountId = urlParams.get('accountid') || '';
-        const token = contentId; // In Crunchyroll, the token is part of the playbackGuid
+        // Extract playbackGuid and accountid from URL more safely
+        let token = '';
+        let accountId = '';
+        
+        try {
+            // Extract using regex instead of URL parsing which can be problematic
+            const playbackGuidMatch = /playbackGuid=([^&]+)/.exec(streamUrl);
+            if (playbackGuidMatch && playbackGuidMatch[1]) {
+                const parts = playbackGuidMatch[1].split('-');
+                if (parts.length > 1) {
+                    token = parts[1]; // Extract the second part as the token
+                }
+            }
+            
+            const accountIdMatch = /accountid=([^&]+)/.exec(streamUrl);
+            if (accountIdMatch && accountIdMatch[1]) {
+                accountId = accountIdMatch[1];
+            }
+        } catch (e) {
+            console.error("Error parsing stream URL parameters:", e);
+        }
         
         console.log("Using content ID:", videoId);
         console.log("Using playback token:", token);
@@ -616,7 +632,7 @@ function setupDrmForWebOS(videoElement, streamUrl, accessToken, playhead, resolv
         
         // Add license response handling
         dashPlayer.registerLicenseResponseFilter(function(response) {
-            if (response.url.endsWith('widevine')) {
+            if (response.url && response.url.endsWith('widevine')) {
                 try {
                     // Crunchyroll sends back a JSON response with the license as base64
                     const textDecoder = new TextDecoder('utf-8');
