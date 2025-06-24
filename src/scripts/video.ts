@@ -397,6 +397,29 @@ const loadClosestEpisodes: Callback = async ({ state }) => {
 }
 
 /**
+ * Get streams using the Firefox-compatible endpoint
+ * @param videoId Content ID to get streams for
+ * @returns Promise with stream data
+ */
+async function getFirefoxCompatibleStreams(videoId: string): Promise<any> {
+  try {
+    const accessToken = localStorage.getItem('accessToken');
+    console.log("Requesting Firefox-compatible stream for:", videoId);
+    
+    const response = await fetch(`https://cr-play-service.prd.crunchyrollsvc.com/v1/${videoId}/web/firefox/play`, {
+      headers: {
+        'Authorization': `Bearer ${accessToken}`
+      }
+    });
+    
+    return await response.json();
+  } catch (error) {
+    console.error("Error fetching Firefox-compatible streams:", error);
+    throw error;
+  }
+}
+
+/**
  * Stream video with proper DRM support for WebOS 3.5
  * @param component
  */
@@ -452,38 +475,37 @@ const streamVideo: Callback = async ({ state }) => {
     });
 
     try {
-        console.log("Attempting to use modern streaming API...");
-        
         // Get the current access token
         const accessToken = localStorage.getItem('accessToken');
         console.log("Using access token:", accessToken ? "Present" : "Missing");
         
-        // Get stream info from the modern API
-        const modernResponse = await App.modernStreams(videoId);
+        // Try Firefox API first (more compatible)
+        console.log("Attempting to use Firefox-compatible streaming API...");
+        const firefoxResponse = await getFirefoxCompatibleStreams(videoId);
         
-        if (!modernResponse.error && (modernResponse.url || (modernResponse.hardSubs && Object.keys(modernResponse.hardSubs).length))) {
-            console.log("Modern streaming API successful!");
+        if (!firefoxResponse.error && (firefoxResponse.url || (firefoxResponse.hardSubs && Object.keys(firefoxResponse.hardSubs).length))) {
+            console.log("Firefox-compatible streaming API successful!");
             
             // Choose the appropriate stream URL
             let stream = '';
             const locale = localStorage.getItem('preferredContentSubtitleLanguage');
             
             // Check if we have hardSubs in the preferred language
-            if (modernResponse.hardSubs && modernResponse.hardSubs[locale]) {
-                stream = modernResponse.hardSubs[locale].url;
-                console.log(`Using hardsub URL for locale ${locale}`);
-            } else if (modernResponse.url) {
+            if (firefoxResponse.hardSubs && firefoxResponse.hardSubs[locale]) {
+                stream = firefoxResponse.hardSubs[locale].url;
+                console.log(`Using Firefox hardsub URL for locale ${locale}`);
+            } else if (firefoxResponse.url) {
                 // Otherwise use the main URL
-                stream = modernResponse.url;
-                console.log("Using main URL");
+                stream = firefoxResponse.url;
+                console.log("Using Firefox main URL");
             }
 
             if (!stream) {
-                throw Error('No streams to load.');
+                throw Error('No Firefox streams to load.');
             }
             
             // Print the stream URL for debugging
-            console.log(`Full stream URL: ${stream}`);
+            console.log(`Full Firefox stream URL: ${stream}`);
             
             // Handle proxy if needed
             const proxyUrl = document.body.dataset.proxyUrl;
@@ -495,7 +517,7 @@ const streamVideo: Callback = async ({ state }) => {
             area.classList.add('video-is-loading');
             
             // WEBOS NATIVE PLAYBACK APPROACH
-            console.log("Using WebOS 3.5 native DRM playback");
+            console.log("Using WebOS 3.5 native DRM playback with Firefox stream");
             
             // Clean up any existing players
             if (hls) {
@@ -513,15 +535,78 @@ const streamVideo: Callback = async ({ state }) => {
             video.load();
             
             return await new Promise((resolve) => {
-                // Setup EME (Encrypted Media Extensions) for WebOS
-           setupDrmForWebOS(video, stream, accessToken, playhead, resolve, videoId);
+                // Setup EME (Encrypted Media Extensions) for WebOS with Firefox stream
+                setupDrmForWebOS(video, stream, accessToken, playhead, resolve, videoId);
             });
         } else {
-            console.log("Modern API didn't return valid stream info, falling back to legacy API");
-            throw new Error("Modern API failed");
+            // Fall back to modern API
+            console.log("Firefox API failed, trying modern API...");
+            
+            // Get stream info from the modern API
+            const modernResponse = await App.modernStreams(videoId);
+            
+            if (!modernResponse.error && (modernResponse.url || (modernResponse.hardSubs && Object.keys(modernResponse.hardSubs).length))) {
+                console.log("Modern streaming API successful!");
+                
+                // Choose the appropriate stream URL
+                let stream = '';
+                const locale = localStorage.getItem('preferredContentSubtitleLanguage');
+                
+                // Check if we have hardSubs in the preferred language
+                if (modernResponse.hardSubs && modernResponse.hardSubs[locale]) {
+                    stream = modernResponse.hardSubs[locale].url;
+                    console.log(`Using hardsub URL for locale ${locale}`);
+                } else if (modernResponse.url) {
+                    // Otherwise use the main URL
+                    stream = modernResponse.url;
+                    console.log("Using main URL");
+                }
+
+                if (!stream) {
+                    throw Error('No streams to load.');
+                }
+                
+                // Print the stream URL for debugging
+                console.log(`Full stream URL: ${stream}`);
+                
+                // Handle proxy if needed
+                const proxyUrl = document.body.dataset.proxyUrl;
+                const proxyEncode = document.body.dataset.proxyEncode;
+                if (proxyUrl) {
+                    stream = proxyUrl + (proxyEncode === "true" ? encodeURIComponent(stream) : stream);
+                }
+
+                area.classList.add('video-is-loading');
+                
+                // WEBOS NATIVE PLAYBACK APPROACH
+                console.log("Using WebOS 3.5 native DRM playback");
+                
+                // Clean up any existing players
+                if (hls) {
+                    hls.destroy();
+                    hls = null;
+                }
+                if (dashPlayer) {
+                    dashPlayer.destroy();
+                    dashPlayer = null;
+                }
+                
+                // Clean video element
+                video.pause();
+                video.removeAttribute('src');
+                video.load();
+                
+                return await new Promise((resolve) => {
+                    // Setup EME (Encrypted Media Extensions) for WebOS
+                    setupDrmForWebOS(video, stream, accessToken, playhead, resolve, videoId);
+                });
+            } else {
+                console.log("Modern API didn't return valid stream info, falling back to legacy API");
+                throw new Error("Modern API failed");
+            }
         }
     } catch (error) {
-        console.error("Modern streaming failed:", error);
+        console.error("All streaming methods failed:", error);
         
         // Directly try legacy streaming
         return await new Promise((resolve) => {
@@ -531,181 +616,28 @@ const streamVideo: Callback = async ({ state }) => {
 };
 
 /**
- * Handle Crunchyroll DRM playback for WebOS 3.5
+ * Clean up DRM session when done or on error
  */
-function setupDrmForWebOS(videoElement, streamUrl, accessToken, playhead, resolve, videoId) {
-    console.log("Setting up WebOS 3.5 DRM playback with DASH.js");
-    
-    if (!window.dashjs) {
-        console.error("DASH.js not available");
-        showError("Required video player not available");
-        resolve(null);
-        return;
-    }
-    
-    try {
-        // Clean up any existing players
-        if (dashPlayer) {
-            dashPlayer.reset();
-            dashPlayer = null;
-        }
-        
-        // Create the DASH player
-        dashPlayer = window.dashjs.MediaPlayer().create();
-        
-        // Extract playbackGuid and accountid from URL more safely
-        let token = '';
-        let accountId = '';
-        
+function deleteSession(videoId: string, token: string, accessToken: string): Promise<void> {
+    return new Promise<void>((resolve) => {
         try {
-            // Extract using regex instead of URL parsing which can be problematic
-            const playbackGuidMatch = /playbackGuid=([^&]+)/.exec(streamUrl);
-            if (playbackGuidMatch && playbackGuidMatch[1]) {
-                const parts = playbackGuidMatch[1].split('-');
-                if (parts.length > 1) {
-                    token = parts[1]; // Extract the second part as the token
+            fetch(`https://cr-play-service.prd.crunchyrollsvc.com/v1/token/${videoId}/${token}`, {
+                method: "DELETE",
+                headers: {
+                    "Authorization": `Bearer ${accessToken}`,
+                    "Content-Type": "application/x-www-form-urlencoded"
                 }
-            }
-            
-            const accountIdMatch = /accountid=([^&]+)/.exec(streamUrl);
-            if (accountIdMatch && accountIdMatch[1]) {
-                accountId = accountIdMatch[1];
-            }
+            })
+            .then(() => resolve())
+            .catch((error) => {
+                console.error("Error cleaning up DRM session:", error);
+                resolve();
+            });
         } catch (e) {
-            console.error("Error parsing stream URL parameters:", e);
+            console.error("Error in deleteSession:", e);
+            resolve();
         }
-        
-        console.log("Using content ID:", videoId);
-        console.log("Using playback token:", token);
-        console.log("Using account ID:", accountId);
-        
-        // Configure protection data (DRM)
-        const protectionData = {
-            'com.widevine.alpha': {
-                serverURL: 'https://cr-license-proxy.prd.crunchyrollsvc.com/v1/license/widevine',
-                httpRequestHeaders: {
-                    'X-Cr-Content-Id': videoId,
-                    'X-Cr-Video-Token': token,
-                    'Authorization': 'Bearer ' + accessToken
-                },
-                priority: 1
-            },
-            'com.microsoft.playready': {
-                serverURL: 'https://cr-license-proxy.prd.crunchyrollsvc.com/v1/license/playReady',
-                httpRequestHeaders: {
-                    'X-Cr-Content-Id': videoId,
-                    'X-Cr-Video-Token': token,
-                    'Authorization': 'Bearer ' + accessToken,
-                    'SOAPAction': '"http://schemas.microsoft.com/DRM/2007/03/protocols/AcquireLicense"'
-                },
-                priority: 2
-            }
-        };
-        
-        // Set up the player
-        dashPlayer.initialize(videoElement, streamUrl, false);
-        dashPlayer.setProtectionData(protectionData);
-        
-        // Set buffer configuration for WebOS 3.5 (limited RAM)
-        dashPlayer.updateSettings({
-            streaming: {
-                buffer: {
-                    bufferTimeDefault: 20,
-                    bufferTimeAtTopQuality: 90,
-                    bufferTimeAtTopQualityLongForm: 180,
-                    longFormContentDurationThreshold: 600,
-                    fastSwitchEnabled: true,
-                    bufferToKeep: 12,
-                    bufferPruningInterval: 8,
-                    initialBufferLevel: 12,
-                },
-                abr: {
-                    autoSwitchBitrate: {
-                        audio: true,
-                        video: true
-                    },
-                    initialBitrate: { audio: -1, video: -1 },
-                    limitBitrateByPortal: true
-                },
-            }
-        });
-        
-        // Add license response handling
-        dashPlayer.registerLicenseResponseFilter(function(response) {
-            if (response.url && response.url.endsWith('widevine')) {
-                try {
-                    // Crunchyroll sends back a JSON response with the license as base64
-                    const textDecoder = new TextDecoder('utf-8');
-                    const jsonString = textDecoder.decode(response.data);
-                    const jsonObject = JSON.parse(jsonString);
-                    
-                    if (jsonObject.license) {
-                        const binaryString = atob(jsonObject.license);
-                        const newUint8Array = new Uint8Array(binaryString.length);
-                        for (let i = 0; i < binaryString.length; i++) {
-                            newUint8Array[i] = binaryString.charCodeAt(i);
-                        }
-                        response.data = newUint8Array.buffer;
-                    }
-                } catch (e) {
-                    console.error("Error parsing license response:", e);
-                }
-            }
-        });
-        
-        // Add request headers to all requests
-        dashPlayer.setRequestHeaders({
-            'Authorization': 'Bearer ' + accessToken
-        });
-        
-        // Set playhead position
-        if (playhead > 0) {
-            dashPlayer.seek(playhead);
-        }
-        
-        // Track player events
-        const onPlaybackStarted = function() {
-            console.log("DRM video playback started!");
-            dashPlayer.off('playbackStarted', onPlaybackStarted);
-            dashPlayer.off('error', onError);
-            playbackStarted = true;
-            area.classList.remove('video-is-loading');
-            area.classList.add('video-is-loaded');
-            resolve(null);
-            
-            clearTimeout(loadingTimeout);
-        };
-        
-        const onError = function(e) {
-            console.error("DRM video playback error:", e);
-            dashPlayer.off('playbackStarted', onPlaybackStarted);
-            dashPlayer.off('error', onError);
-            tryLegacyStreaming(null, playhead, resolve);
-            
-            clearTimeout(loadingTimeout);
-        };
-        
-        dashPlayer.on('playbackStarted', onPlaybackStarted);
-        dashPlayer.on('error', onError);
-        
-        // Start playback
-        console.log("Starting DASH.js playback");
-        dashPlayer.play();
-        
-        // Set timeout for fallback
-        const loadingTimeout = setTimeout(function() {
-            if (!playbackStarted) {
-                console.log("DRM playback failed to start within timeout");
-                dashPlayer.off('playbackStarted', onPlaybackStarted);
-                dashPlayer.off('error', onError);
-                tryLegacyStreaming(null, playhead, resolve);
-            }
-        }, 15000);
-        
-    } catch (e) {
-        console.error("Error in DASH.js setup:", e);
-        tryLegacyStreaming(null, playhead, resolve);
-    }
+    });
 }
 
 /**
@@ -1221,3 +1153,7 @@ Route.add({
     component: '<div data-video></div>',
     authenticated: true
 })
+function setupDrmForWebOS(video: HTMLVideoElement, stream: string, accessToken: string, playhead: number, resolve: (value: void | PromiseLike<void>) => void, videoId: any) {
+    throw new Error("Function not implemented.");
+}
+
