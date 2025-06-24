@@ -1,0 +1,75 @@
+name: Build Crunchyroll WebOS App
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      build_type:
+        description: 'Build type (dev or prod)'
+        required: true
+        default: 'dev'
+        type: choice
+        options:
+          - dev
+          - prod
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+      
+    - name: Setup Node.js 18.x
+      uses: actions/setup-node@v3
+      with:
+        node-version: '18.x'
+        
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y git
+        
+    - name: Install global npm packages
+      run: |
+        npm install -g @enact/cli@6.1.1
+        npm install -g @webos-tools/cli
+        
+    - name: Create project directory
+      run: |
+        mkdir -p webos-crunchy
+        cd webos-crunchy
+        
+    - name: Clone repositories
+      working-directory: ./webos-crunchy
+      run: |
+        git clone https://github.com/ediaz23/crunchyroll-webos-stream --recursive --single-branch --branch=master --depth 3
+        git clone https://github.com/ediaz23/crunchyroll-webos-service --single-branch --branch=master --depth 3
+        git clone https://github.com/ediaz23/crunchyroll-webos-server --single-branch --branch=master --depth 3
+        
+    - name: Install dependencies
+      working-directory: ./webos-crunchy
+      run: |
+        cd crunchyroll-webos-stream && npm install && cd ..
+        cd crunchyroll-webos-service && npm install && cd ..
+        cd crunchyroll-webos-server && npm install && cd ..
+        
+    - name: Build application
+      working-directory: ./webos-crunchy/crunchyroll-webos-stream
+      run: |
+        if [[ "${{ github.event.inputs.build_type }}" == "prod" ]]; then
+          npm run build-p
+        else
+          npm run build-dev
+        fi
+        
+    - name: Upload built package
+      uses: actions/upload-artifact@v3
+      with:
+        name: crunchyroll-webos-app
+        path: ./webos-crunchy/crunchyroll-webos-stream/bin/*.ipk
+        if-no-files-found: error
