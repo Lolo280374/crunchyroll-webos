@@ -46,19 +46,19 @@ jobs:
     - name: Clone repositories
       working-directory: ./webos-crunchy
       run: |
-        git clone https://github.com/ediaz23/crunchyroll-webos-stream --recursive --single-branch --branch=master --depth 3
+        git clone https://github.com/Lolo280374/crunchyroll-webos --recursive --single-branch --branch=stream --depth 3
         git clone https://github.com/ediaz23/crunchyroll-webos-service --single-branch --branch=master --depth 3
         git clone https://github.com/ediaz23/crunchyroll-webos-server --single-branch --branch=master --depth 3
         
     - name: Install dependencies
       working-directory: ./webos-crunchy
       run: |
-        cd crunchyroll-webos-stream && npm install && cd ..
+        cd crunchyroll-webos && npm install && cd ..
         cd crunchyroll-webos-service && npm install && cd ..
         cd crunchyroll-webos-server && npm install && cd ..
         
     - name: Build application
-      working-directory: ./webos-crunchy/crunchyroll-webos-stream
+      working-directory: ./webos-crunchy/crunchyroll-webos
       run: |
         # Default to dev build for automated pushes
         if [[ "${{ github.event_name }}" == "workflow_dispatch" && "${{ github.event.inputs.build_type }}" == "prod" ]]; then
@@ -71,5 +71,5 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: crunchyroll-webos-app-${{ github.sha }}
-        path: ./webos-crunchy/crunchyroll-webos-stream/bin/*.ipk
+        path: ./webos-crunchy/crunchyroll-webos/bin/*.ipk
         if-no-files-found: error
