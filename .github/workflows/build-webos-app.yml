@@ -1,10 +1,9 @@
 name: Build Crunchyroll WebOS App
 
 on:
+  # Trigger on all pushes to any branch
   push:
-    branches: [ main ]
-  pull_request:
-    branches: [ main ]
+  # Keep the manual trigger option
   workflow_dispatch:
     inputs:
       build_type:
@@ -61,7 +60,8 @@ jobs:
     - name: Build application
       working-directory: ./webos-crunchy/crunchyroll-webos-stream
       run: |
-        if [[ "${{ github.event.inputs.build_type }}" == "prod" ]]; then
+        # Default to dev build for automated pushes
+        if [[ "${{ github.event_name }}" == "workflow_dispatch" && "${{ github.event.inputs.build_type }}" == "prod" ]]; then
           npm run build-p
         else
           npm run build-dev
@@ -70,6 +70,6 @@ jobs:
     - name: Upload built package
       uses: actions/upload-artifact@v3
       with:
-        name: crunchyroll-webos-app
+        name: crunchyroll-webos-app-${{ github.sha }}
         path: ./webos-crunchy/crunchyroll-webos-stream/bin/*.ipk
         if-no-files-found: error
