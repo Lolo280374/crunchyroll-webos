@@ -1,0 +1,44 @@
+@import (reference) '@enact/moonstone/styles/colors.less';
+
+.homeToolbar {
+    position: relative;
+
+    >div {
+        display: flex;
+        align-items: center;
+        cursor: pointer;
+
+        >div:last-of-type {
+            position: relative;
+            padding-right: 0.5rem;
+        }
+
+        >div:first-of-type {
+            padding-right: 0;
+        }
+    }
+
+    .iconFocus {
+        background-color: @moon-darker-gray !important;
+
+        >div:first-of-type {
+            color: @moon-accent !important;
+        }
+    }
+
+    .iconActive {
+        >div:first-of-type {
+            position: relative;
+
+            &::after {
+                content: '';
+                position: absolute;
+                left: 0;
+                bottom: -0.2rem;
+                width: 100%;
+                height: 5px;
+                background-color: @moon-accent;
+            }
+        }
+    }
+}

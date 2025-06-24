@@ -1,0 +1,31 @@
+.app {
+    >div {
+        >main {
+            >article {
+                >section {
+                    height: 100%;
+                }
+            }
+        }
+    }
+
+    :global(#home-panel) {
+        >section {
+            >div:first-of-type {
+                height: 100%;
+
+                >div {
+                    height: 100%;
+                }
+            }
+        }
+    }
+
+    :global(#media-controls) {
+
+        >div:first-child,
+        >div:last-child {
+            flex-basis: 30%;
+        }
+    }
+}

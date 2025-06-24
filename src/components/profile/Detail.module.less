@@ -1,0 +1,55 @@
+
+@import (reference) '@enact/moonstone/styles/colors.less';
+
+.profileDetail {
+
+    margin-top: 1rem;
+    display: flex;
+
+    .formContent {
+        padding: 1rem;
+        flex-grow: 1;
+
+        .formColumn {
+            background-color: @moon-darker-gray;
+            padding: 1rem;
+            border-radius: 1rem;
+            min-width: 17rem;
+            margin-left: auto;
+            margin-right: auto;
+
+
+            >div {
+                margin-bottom: 1.2rem;
+            }
+
+            >div:first-of-type {
+                margin-top: 1rem;
+            }
+
+            >div:last-of-type {
+                margin-bottom: 0;
+            }
+
+            .actions {
+                .buttonContainer {
+                    >div {
+                        margin-top: 1rem;
+                    }
+
+                    .buttonIcon {
+                        margin-right: 0.5rem;
+                    }
+                }
+            }
+        }
+
+        .formColumn:first-child {
+            margin-left: 0;
+        }
+
+        .formColumn:last-child {
+            margin-left: 0;
+        }
+    }
+}

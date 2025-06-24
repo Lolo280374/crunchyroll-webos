@@ -1,0 +1,24 @@
+.scrollFixRule {
+    height: 100%;
+
+    >div>div {
+        height: 100%;
+
+        div[role="list"] {
+            height: 100%;
+        }
+        
+        &::before,
+        &::after {
+            height: 0 !important;
+        }
+    }
+}
+
+.scrollerFix {
+    .scrollFixRule();
+
+    > :global(.moonstone) {
+        .scrollFixRule();
+    }
+}

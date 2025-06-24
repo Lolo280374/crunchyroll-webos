@@ -1,0 +1,34 @@
+@import (reference) '@enact/moonstone/styles/colors.less';
+
+.homeContentBanner {
+    flex-basis: calc(100% - 1.5rem);
+    max-height: calc(100% - 1.5rem);
+    height: calc(100% - 1.5rem);
+    overflow: hidden;
+
+    >div {
+        max-height: 100%;
+        height: 100%;
+        width: 50%;
+    }
+
+    >div:first-of-type {
+        padding-right: 2rem;
+    }
+
+    >div:last-of-type {
+        display: flex;
+        align-items: center;
+    }
+
+    .poster {
+        border-radius: 1.5rem;
+        width: 100%;
+        height: 100%;
+        margin: 0;
+    }
+    
+    &.active{
+        background-color: @moon-darker-gray !important;
+    }
+}

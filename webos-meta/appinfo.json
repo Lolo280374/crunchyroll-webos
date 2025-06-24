@@ -1,0 +1,15 @@
+{
+    "id": "lol.lolodotzip.crunchyroll",
+    "version": "2.1.0",
+    "vendor": "lolodotzip",
+    "type": "web",
+    "main": "index.html",
+    "title": "Crunchyroll",
+    "icon": "icon.png",
+    "miniicon": "icon-mini.png",
+    "largeIcon": "icon-large.png",
+    "iconColor": "#F47521",
+    "uiRevision": 2,
+    "disableBackHistoryAPI": true,
+    "requiredMemory": 180
+}
