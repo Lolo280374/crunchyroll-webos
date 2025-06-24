@@ -1,0 +1,49 @@
+name: Build Test
+
+on:
+  push:
+    tags-ignore:
+      - 'v*.*.*'
+    branches:
+      - '*'
+
+jobs:
+  build-webos:
+    name: Build WebOS
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Set up Node.js 16
+        uses: actions/setup-node@v4
+        with:
+          node-version: 16.17.0
+
+      - name: Install Enact CLI globally
+        run: npm install -g @enact/cli@6.1.1
+
+      - name: Create workspace folder
+        run: mkdir ~/webos-crunchy-test
+
+      - name: Clone source repositories
+        run: |
+          cd ~/webos-crunchy-test
+          git clone https://github.com/Lolo280374/crunchyroll-webos --recursive --single-branch --branch=master --depth 3
+          git clone https://github.com/ediaz23/crunchyroll-webos-service --single-branch --branch=master --depth 3
+          git clone https://github.com/ediaz23/crunchyroll-webos-server --single-branch --branch=master --depth 3
+
+      - name: Install dependencies for all projects
+        run: |
+          cd ~/webos-crunchy-test/crunchyroll-webos && npm install
+          cd ~/webos-crunchy-test/crunchyroll-webos-service && npm install
+          cd ~/webos-crunchy-test/crunchyroll-webos-server && npm install
+
+      - name: Build development package
+        run: |
+          cd ~/webos-crunchy-test/crunchyroll-webos
+          npm run build-dev
+
+      - name: Upload built app
+        uses: actions/upload-artifact@v4
+        with:
+          name: webos-crunchy-app
+          path: ~/webos-crunchy-test/crunchyroll-webos/bin/*
