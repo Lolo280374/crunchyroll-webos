@@ -40,9 +40,9 @@ jobs:
           cd ~/webos-crunchy-test/crunchyroll-webos-server && npm install
 
       - name: Symlink service directory
-        run: |
-           ln -s ../crunchyroll-webos-service ./service
-           working-directory: ./webos-crunchy-test/crunchyroll-webos-stream
+        run: ln -s ../crunchyroll-webos-service ./service
+        working-directory: ./webos-crunchy-test/crunchyroll-webos-stream
+
 
       - name: Build development package
         run: |
