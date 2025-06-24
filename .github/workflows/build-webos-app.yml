@@ -57,6 +57,18 @@ jobs:
         cd crunchyroll-webos-service && npm install && cd ..
         cd crunchyroll-webos-server && npm install && cd ..
         
+    - name: Build Service Component First
+      working-directory: ./webos-crunchy
+      run: |
+        # Build the service component
+        cd crunchyroll-webos-service && npm run build && cd ..
+        # Create the service directory in the stream project if it doesn't exist
+        mkdir -p crunchyroll-webos/service
+        # Copy the built service files to where the main app expects them
+        cp -r crunchyroll-webos-service/dist crunchyroll-webos/service/
+        # List directories to verify
+        ls -la crunchyroll-webos/service
+        
     - name: Build application
       working-directory: ./webos-crunchy/crunchyroll-webos
       run: |
