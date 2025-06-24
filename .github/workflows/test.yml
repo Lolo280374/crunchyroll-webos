@@ -13,10 +13,10 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Set up Node.js 16
+      - name: Set up Node.js 18
         uses: actions/setup-node@v4
         with:
-          node-version: 16.17.0
+          node-version: 18.20.2
 
       - name: Install Enact CLI and webOS CLI globally
         run: |
@@ -38,6 +38,11 @@ jobs:
           cd ~/webos-crunchy-test/crunchyroll-webos && npm install
           cd ~/webos-crunchy-test/crunchyroll-webos-service && npm install
           cd ~/webos-crunchy-test/crunchyroll-webos-server && npm install
+
+      - name: Symlink service directory
+        run: |
+           ln -s ../crunchyroll-webos-service ./service
+           working-directory: ./webos-crunchy-test/crunchyroll-webos-stream
 
       - name: Build development package
         run: |
