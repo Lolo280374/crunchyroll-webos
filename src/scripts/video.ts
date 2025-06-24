@@ -511,7 +511,7 @@ const streamVideo: Callback = async ({ state }) => {
             
             return await new Promise((resolve) => {
                 // Setup EME (Encrypted Media Extensions) for WebOS
-                setupDrmForWebOS(video, stream, accessToken, playhead, resolve);
+           setupDrmForWebOS(video, stream, accessToken, playhead, resolve, videoId);
             });
         } else {
             console.log("Modern API didn't return valid stream info, falling back to legacy API");
@@ -528,78 +528,164 @@ const streamVideo: Callback = async ({ state }) => {
 };
 
 /**
- * Set up DRM for WebOS
+ * Handle Crunchyroll DRM playback for WebOS 3.5
  */
-function setupDrmForWebOS(videoElement, streamUrl, accessToken, playhead, resolve) {
-    console.log("Setting up WebOS DRM for playback");
+function setupDrmForWebOS(videoElement, streamUrl, accessToken, playhead, resolve, videoId) {
+    console.log("Setting up WebOS 3.5 DRM playback with DASH.js");
     
-    // Check if EME is supported
-    if (typeof navigator.requestMediaKeySystemAccess !== 'function') {
-        console.error("EME not supported on this device");
-        showError("This device does not support protected content playback.");
+    if (!window.dashjs) {
+        console.error("DASH.js not available");
+        showError("Required video player not available");
         resolve(null);
         return;
     }
     
-    // Add meta tag for authorization headers
-    var meta = document.createElement('meta');
-    meta.httpEquiv = 'Authorization';
-    meta.content = 'Bearer ' + accessToken;
-    document.head.appendChild(meta);
-    
-    // Create a simple video source element
-    var source = document.createElement('source');
-    source.src = streamUrl;
-    source.type = 'application/dash+xml';
-    videoElement.appendChild(source);
-    
-    // For WebOS, we need to set special attributes for DRM
-    videoElement.setAttribute('webkit-playsinline', '');
-    videoElement.setAttribute('playsinline', '');
-    
-    // If playhead is set, apply it
-    if (playhead > 0) {
-        videoElement.currentTime = playhead;
-    }
-    
-    // Setup event listeners for tracking playback
-    var loadingTimeout = setTimeout(function() {
-        if (!playbackStarted) {
-            console.log("DRM playback failed to start within timeout, trying legacy");
-            videoElement.removeEventListener('playing', onPlaying);
-            videoElement.removeEventListener('error', onError);
-            tryLegacyStreaming(null, playhead, resolve);
-        }
-    }, 15000);
-    
-    function onPlaying() {
-        console.log("DRM video playback started!");
-        clearTimeout(loadingTimeout);
-        videoElement.removeEventListener('playing', onPlaying);
-        playbackStarted = true;
-        area.classList.remove('video-is-loading');
-        area.classList.add('video-is-loaded');
-        resolve(null);
-    }
-    
-    function onError() {
-        console.error("DRM video playback error:", videoElement.error);
-        clearTimeout(loadingTimeout);
-        videoElement.removeEventListener('error', onError);
-        tryLegacyStreaming(null, playhead, resolve);
-    }
-    
-    videoElement.addEventListener('playing', onPlaying);
-    videoElement.addEventListener('error', onError);
-    
-    // On WebOS, we can often just set the src and let the native player handle DRM
-    videoElement.load();
-    
     try {
-        videoElement.play();
+        // Clean up any existing players
+        if (dashPlayer) {
+            dashPlayer.reset();
+            dashPlayer = null;
+        }
+        
+        // Create the DASH player
+        dashPlayer = window.dashjs.MediaPlayer().create();
+        
+        // Extract content ID and token from URL
+        const urlParams = new URL(streamUrl).searchParams;
+        const contentId = urlParams.get('playbackGuid')?.split('-')[1] || '';
+        const accountId = urlParams.get('accountid') || '';
+        const token = contentId; // In Crunchyroll, the token is part of the playbackGuid
+        
+        console.log("Using content ID:", videoId);
+        console.log("Using playback token:", token);
+        console.log("Using account ID:", accountId);
+        
+        // Configure protection data (DRM)
+        const protectionData = {
+            'com.widevine.alpha': {
+                serverURL: 'https://cr-license-proxy.prd.crunchyrollsvc.com/v1/license/widevine',
+                httpRequestHeaders: {
+                    'X-Cr-Content-Id': videoId,
+                    'X-Cr-Video-Token': token,
+                    'Authorization': 'Bearer ' + accessToken
+                },
+                priority: 1
+            },
+            'com.microsoft.playready': {
+                serverURL: 'https://cr-license-proxy.prd.crunchyrollsvc.com/v1/license/playReady',
+                httpRequestHeaders: {
+                    'X-Cr-Content-Id': videoId,
+                    'X-Cr-Video-Token': token,
+                    'Authorization': 'Bearer ' + accessToken,
+                    'SOAPAction': '"http://schemas.microsoft.com/DRM/2007/03/protocols/AcquireLicense"'
+                },
+                priority: 2
+            }
+        };
+        
+        // Set up the player
+        dashPlayer.initialize(videoElement, streamUrl, false);
+        dashPlayer.setProtectionData(protectionData);
+        
+        // Set buffer configuration for WebOS 3.5 (limited RAM)
+        dashPlayer.updateSettings({
+            streaming: {
+                buffer: {
+                    bufferTimeDefault: 20,
+                    bufferTimeAtTopQuality: 90,
+                    bufferTimeAtTopQualityLongForm: 180,
+                    longFormContentDurationThreshold: 600,
+                    fastSwitchEnabled: true,
+                    bufferToKeep: 12,
+                    bufferPruningInterval: 8,
+                    initialBufferLevel: 12,
+                },
+                abr: {
+                    autoSwitchBitrate: {
+                        audio: true,
+                        video: true
+                    },
+                    initialBitrate: { audio: -1, video: -1 },
+                    limitBitrateByPortal: true
+                },
+            }
+        });
+        
+        // Add license response handling
+        dashPlayer.registerLicenseResponseFilter(function(response) {
+            if (response.url.endsWith('widevine')) {
+                try {
+                    // Crunchyroll sends back a JSON response with the license as base64
+                    const textDecoder = new TextDecoder('utf-8');
+                    const jsonString = textDecoder.decode(response.data);
+                    const jsonObject = JSON.parse(jsonString);
+                    
+                    if (jsonObject.license) {
+                        const binaryString = atob(jsonObject.license);
+                        const newUint8Array = new Uint8Array(binaryString.length);
+                        for (let i = 0; i < binaryString.length; i++) {
+                            newUint8Array[i] = binaryString.charCodeAt(i);
+                        }
+                        response.data = newUint8Array.buffer;
+                    }
+                } catch (e) {
+                    console.error("Error parsing license response:", e);
+                }
+            }
+        });
+        
+        // Add request headers to all requests
+        dashPlayer.setRequestHeaders({
+            'Authorization': 'Bearer ' + accessToken
+        });
+        
+        // Set playhead position
+        if (playhead > 0) {
+            dashPlayer.seek(playhead);
+        }
+        
+        // Track player events
+        const onPlaybackStarted = function() {
+            console.log("DRM video playback started!");
+            dashPlayer.off('playbackStarted', onPlaybackStarted);
+            dashPlayer.off('error', onError);
+            playbackStarted = true;
+            area.classList.remove('video-is-loading');
+            area.classList.add('video-is-loaded');
+            resolve(null);
+            
+            clearTimeout(loadingTimeout);
+        };
+        
+        const onError = function(e) {
+            console.error("DRM video playback error:", e);
+            dashPlayer.off('playbackStarted', onPlaybackStarted);
+            dashPlayer.off('error', onError);
+            tryLegacyStreaming(null, playhead, resolve);
+            
+            clearTimeout(loadingTimeout);
+        };
+        
+        dashPlayer.on('playbackStarted', onPlaybackStarted);
+        dashPlayer.on('error', onError);
+        
+        // Start playback
+        console.log("Starting DASH.js playback");
+        dashPlayer.play();
+        
+        // Set timeout for fallback
+        const loadingTimeout = setTimeout(function() {
+            if (!playbackStarted) {
+                console.log("DRM playback failed to start within timeout");
+                dashPlayer.off('playbackStarted', onPlaybackStarted);
+                dashPlayer.off('error', onError);
+                tryLegacyStreaming(null, playhead, resolve);
+            }
+        }, 15000);
+        
     } catch (e) {
-        console.error("Error starting DRM playback:", e);
-        onError();
+        console.error("Error in DASH.js setup:", e);
+        tryLegacyStreaming(null, playhead, resolve);
     }
 }
 
