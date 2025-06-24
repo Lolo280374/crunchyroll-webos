@@ -41,7 +41,7 @@ jobs:
 
       - name: Symlink service directory
         run: ln -s ../crunchyroll-webos-service ./service
-        working-directory: ./webos-crunchy-test/crunchyroll-webos-stream
+        working-directory: ./webos-crunchy-test/crunchyroll-webos
 
 
       - name: Build development package
