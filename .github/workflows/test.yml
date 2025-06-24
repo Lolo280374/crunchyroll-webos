@@ -18,9 +18,10 @@ jobs:
         with:
           node-version: 16.17.0
 
-      - name: Install Enact CLI globally aswell as webos-tools CLI
-        run: npm install -g @enact/cli@6.1.1
-        run: npm install -g @webos-tools/cli
+      - name: Install Enact CLI and webOS CLI globally
+        run: |
+            npm install -g @enact/cli@6.1.1
+            npm install -g @webos-tools/cli
 
       - name: Create workspace folder
         run: mkdir ~/webos-crunchy-test
