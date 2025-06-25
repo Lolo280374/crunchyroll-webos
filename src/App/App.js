@@ -7,6 +7,7 @@ import I18nDecorator from '@enact/i18n/I18nDecorator'
 import regions from 'i18n-iso-m49'
 import countries from 'i18n-iso-countries'
 import languages from '@cospired/i18n-iso-languages'
+import MemoryManager from '../utils/memoryManager';
 
 import { useRecoilState, useSetRecoilState } from 'recoil'
 
@@ -141,5 +142,18 @@ const AppLocal = I18nDecorator({
 }, App)
 
 const AppTheme = MoonstoneDecorator(AppLocal)
+
+// Add this inside your App component
+useEffect(() => {
+  // Initialize memory management for WebOS 3.5
+  const cleanupMemoryManager = MemoryManager.initialize();
+  
+  // Return cleanup function
+  return () => {
+    if (cleanupMemoryManager) {
+      cleanupMemoryManager();
+    }
+  };
+}, []);
 
 export default AppTheme

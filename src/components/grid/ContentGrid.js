@@ -171,10 +171,15 @@ const ContentGrid = ({
                         }
                         <Cell grow style={{ height: '100%', width: noCategory ? '100%' : '80%' }}>
                             <ContentGridItems
-                                contentList={contentList}
-                                load={onLoad}
-                                onLeave={onLeaveView}
-                                autoScroll={autoScroll} />
+    contentList={contentList}
+    load={onLoad}
+    onLeave={onLeaveView}
+    autoScroll={autoScroll}
+    // Add section prop based on contentKey or default to "home"
+    section={contentKey === 'browse_all' ? 'home' : 
+             contentKey === 'search' ? 'search' : 
+             contentKey === 'user_lists' ? 'userLists' : 
+             contentKey === 'discover' ? 'discover' : 'home'} />
                         </Cell>
                     </Row>
                 </Cell>
