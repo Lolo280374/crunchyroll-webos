@@ -10,9 +10,8 @@ import LoadingList from '../LoadingList'
 import { homePositionState } from '../../recoilConfig'
 import useGetImagePerResolution from '../../hooks/getImagePerResolution'
 import { useSetContent } from '../../hooks/setContent'
-// Import our new utilities
 import getGridConfig from '../../utils/gridConfig'
-import OptimizedImage from '../OptimizedImage' // Import our optimized image component
+import OptimizedImage from '../OptimizedImage'
 
 /**
  * Show grid of items
@@ -54,6 +53,17 @@ const ContentGridItems = ({ contentList, load, autoScroll = true, onFocus, mode 
             ? [ri.scale(390 * scaleFactor), ri.scale(240 * scaleFactor)] 
             : [ri.scale(270 * scaleFactor), ri.scale(320 * scaleFactor)]
     }, [mode]);
+
+    // Calculate the container style for enforcing items per row
+    const containerStyle = useMemo(() => {
+        // Calculate width for each item to enforce items per row
+        const width = `${100 / gridConfig.itemsPerRow}%`;
+        return {
+            display: 'grid',
+            gridTemplateColumns: `repeat(${gridConfig.itemsPerRow}, 1fr)`,
+            width: '100%'
+        };
+    }, [gridConfig.itemsPerRow]);
 
     /** @type {Function} */
     const getScrollTo = useCallback((scrollTo) => { scrollToRef.current = scrollTo }, [])
@@ -167,16 +177,19 @@ const ContentGridItems = ({ contentList, load, autoScroll = true, onFocus, mode 
             index={homePosition.rowIndex}
             scrollFn={scrollToRef.current}>
             {optimizedContentList && optimizedContentList.length > 0 &&
-                <VirtualGridList {...rest}
-                    dataSize={optimizedContentList.length}
-                    itemRenderer={renderItem}
-                    itemSize={{ minHeight: itemHeight, minWidth: itemWidth }}
-                    // Use optimized spacing from grid config
-                    spacing={ri.scale(gridConfig.spacing)}
-                    // Ensure we only set visible items within viewport + a small buffer
-                    overhang={1}  // Reduced from default to improve performance
-                    cbScrollTo={getScrollTo}
-                />
+                <div style={containerStyle}>
+                    <VirtualGridList {...rest}
+                        dataSize={optimizedContentList.length}
+                        itemRenderer={renderItem}
+                        itemSize={{ minHeight: itemHeight, minWidth: itemWidth }}
+                        spacing={ri.scale(gridConfig.spacing)}
+                        overhang={1}
+                        cbScrollTo={getScrollTo}
+                        direction="horizontal"
+                        horizontalItemSize={Math.floor(100 / gridConfig.itemsPerRow)}
+                        wrap
+                    />
+                </div>
             }
         </LoadingList>
     )
@@ -195,7 +208,7 @@ ContentGridItems.propTypes = {
     onFocus: PropTypes.func,
     onSelect: PropTypes.func,
     homePositionOverride: PropTypes.any,
-    section: PropTypes.string // Added this prop
+    section: PropTypes.string
 }
 
 export default ContentGridItems
