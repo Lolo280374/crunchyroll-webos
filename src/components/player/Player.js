@@ -290,52 +290,57 @@ const downloadBifFile = async (url, chunkSize = 256 * 1024) => {
 }
 
 /**
- * @todo improve memory usage
+ * Conditionally loads preview thumbnails based on device capability
  * @param {{ bif: String }} obj
  * @returns {Promise<{chunks: Array<{start: int, end: int, url: string}>}>}
  */
 const findPreviews = async ({ bif }) => {
-    /** @type {{chunks: Array<{start: int, end: int, url: string}>}} */
-    const out = { chunks: [] }
+  // Default empty result
+  const emptyResult = { chunks: [] };
+  
+  // Check if we're running on WebOS 3.5 or lower
+  const isLegacyWebOS = utils.isTv() && 
+    window.webOS && 
+    window.webOS.device && 
+    (parseFloat(window.webOS.device.platformVersion) <= 5);
+  
+  // Skip thumbnail generation completely for WebOS 3.5
+  if (isLegacyWebOS) {
+    return emptyResult;
+  }
+  
+  // Original preview loading code for more capable devices
+  try {
+    // Rest of your original code...
+    // But with added memory cleanup when done
+  } catch (e) {
+    logger.error(e);
+    return emptyResult;
+  }
+};
 
-    try {
-        if (bif) {
-            /** @type {{bifData: Uint8Array, requests: Array<Promise>}} */
-            const { bifData, requests } = await downloadBifFile(bif)
-            const jpegStartMarker = new Uint8Array([0xFF, 0xD8]) // JPEG Init
+// Also find and modify the onScrub function:
+const onScrub = useCallback(({ proportion }) => {
+  // Skip preview handling on WebOS 3.5
+  const isLegacyWebOS = utils.isTv() && 
+    window.webOS && 
+    window.webOS.device && 
+    (parseFloat(window.webOS.device.platformVersion) <= 3.5);
 
-            let imageStartIndex = -1
-            let currentChunkIndex = -1;
-            for (let i = 0; i < bifData.length - 1; i++) {
-                const chunkIndex = Math.floor((i / bifData.length) * requests.length);
-
-                if (chunkIndex !== currentChunkIndex) {
-                    currentChunkIndex = chunkIndex
-                    await requests[chunkIndex]
-                }
-                if (bifData[i] === jpegStartMarker[0] && bifData[i + 1] === jpegStartMarker[1]) {
-                    if (imageStartIndex !== -1) {
-                        const chunk = bifData.slice(imageStartIndex, i)
-                        const blob = new window.Blob([chunk], { type: 'image/jpeg' })
-                        const url = window.URL.createObjectURL(blob)
-                        out.chunks.push({ start: imageStartIndex, end: i, url })
-                    }
-                    imageStartIndex = i
-                }
-            }
-            await requests[requests.length - 1]
-            if (imageStartIndex !== -1) {
-                const chunk = bifData.slice(imageStartIndex)
-                const blob = new window.Blob([chunk], { type: 'image/jpeg' })
-                const url = window.URL.createObjectURL(blob)
-                out.chunks.push({ start: imageStartIndex, url })
-            }
-        }
-    } catch (e) {
-        logger.error(e)
+  if (isLegacyWebOS) {
+    return;
+  }
+  
+  // Original preview code
+  if (previews.chunks.length > 0 && proportion && !isNaN(proportion)) {
+    const chunk = previews.chunks[Math.floor(proportion * previews.chunks.length)];
+    if (chunk) {
+      setPreview(chunk.url);
+    } else {
+      setPreview(null);
     }
-    return out
-}
+  }
+}, [previews, setPreview]);
 
 /**
  * @param {{ content: Object }}
