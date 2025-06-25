@@ -28,7 +28,9 @@ import XHRLoader from '../../patch/XHRLoader'
 import utils from '../../utils'
 import MemoryManager from '../../utils/memoryManager'
 import { configurePlayer } from '../../utils/playerConfig';
-
+import NetworkManager from '../../utils/networkManager';
+import optimizeVideoElement from '../../utils/videoElementOptimizer';
+import DOMFreezer from '../../utils/domFreezer';
 
 /**
  * @typedef StreamSession
@@ -815,6 +817,64 @@ const Player = ({ ...rest }) => {
             }
         };
     }, []);
+
+useEffect(() => {
+  // Engage extreme performance mode for playback
+  const networkManager = NetworkManager.getInstance();
+  const domFreezer = DOMFreezer.getInstance();
+  
+  // Block non-essential network requests
+  networkManager.enablePlaybackMode();
+  
+  // Freeze non-essential DOM updates
+  domFreezer.freeze();
+  
+  // Optimize video element when it's available
+  const videoElement = document.querySelector('video');
+  if (videoElement) {
+    optimizeVideoElement(videoElement);
+  }
+  
+  // Apply WebOS system optimizations if available
+  if (window.webOS && window.webOS.systemService) {
+    // Request foreground priority
+    window.webOS.systemService.request("luna://com.webos.service.tvpower", {
+      method: "setMediaState",
+      parameters: { "state": "media" }
+    });
+    
+    // Request CPU priority
+    window.webOS.systemService.request("luna://com.webos.service.resourcemanager", {
+      method: "requestResourceLock",
+      parameters: { 
+        "requestType": "resource", 
+        "resourceType": "CPU",
+        "priority": "high"
+      }
+    });
+  }
+  
+  return () => {
+    // Release resources when component unmounts
+    networkManager.disablePlaybackMode();
+    domFreezer.unfreeze();
+    
+    // Release WebOS system priorities
+    if (window.webOS && window.webOS.systemService) {
+      window.webOS.systemService.request("luna://com.webos.service.tvpower", {
+        method: "setMediaState",
+        parameters: { "state": "none" }
+      });
+      
+      window.webOS.systemService.request("luna://com.webos.service.resourcemanager", {
+        method: "releaseResourceLock",
+        parameters: { 
+          "resourceType": "CPU" 
+        }
+      });
+    }
+  };
+}, []);
 
     /** @type {Function} */
     const selectAudio = useCallback((select) => {
