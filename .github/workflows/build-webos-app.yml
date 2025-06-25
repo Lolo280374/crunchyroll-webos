@@ -57,6 +57,14 @@ jobs:
         cd crunchyroll-webos-service && npm install && cd ..
         cd crunchyroll-webos-server && npm install && cd ..
         
+    - name: Fix ESLint issues automatically
+      working-directory: ./webos-crunchy/crunchyroll-webos
+      run: |
+        # Fix trailing spaces and other formatting issues
+        npx eslint src/components/player/Player.js --fix
+        # Run eslint fix on all files if needed
+        npx eslint "src/**/*.js" "src/**/*.jsx" --fix || true
+
     - name: Build Service Component First
       working-directory: ./webos-crunchy
       run: |
