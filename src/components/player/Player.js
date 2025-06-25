@@ -27,6 +27,7 @@ import { _PLAY_TEST_, _LOCALHOST_SERVER_ } from '../../const'
 import XHRLoader from '../../patch/XHRLoader'
 import utils from '../../utils'
 import MemoryManager from '../../utils/memoryManager'
+import { configurePlayer } from '../../utils/playerConfig';
 
 
 /**
@@ -614,7 +615,10 @@ const createDashPlayer = async (audio, stream, content, subtitle) => {
 
     dashPlayer.extend('XHRLoader', XHRLoader)
     dashPlayer.addRequestInterceptor(modifierDashRequest(stream.profile))
-    await setStreamingConfig(dashPlayer)
+    
+    // Replace setStreamingConfig with our new configurePlayer
+    await configurePlayer(dashPlayer)
+    
     url = stream.urls.find(val => val.locale === subtitle.locale)
     if (!url) {
         url = stream.urls.find(val => val.locale === 'off')
