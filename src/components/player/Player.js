@@ -295,52 +295,66 @@ const downloadBifFile = async (url, chunkSize = 256 * 1024) => {
  * @returns {Promise<{chunks: Array<{start: int, end: int, url: string}>}>}
  */
 const findPreviews = async ({ bif }) => {
-  // Default empty result
-  const emptyResult = { chunks: [] };
-  
-  // Check if we're running on WebOS 3.5 or lower
-  const isLegacyWebOS = utils.isTv() && 
-    window.webOS && 
-    window.webOS.device && 
-    (parseFloat(window.webOS.device.platformVersion) <= 5);
-  
-  // Skip thumbnail generation completely for WebOS 3.5
-  if (isLegacyWebOS) {
-    return emptyResult;
-  }
-  
-  // Original preview loading code for more capable devices
-  try {
-    // Rest of your original code...
-    // But with added memory cleanup when done
-  } catch (e) {
-    logger.error(e);
-    return emptyResult;
-  }
-};
-
-// Also find and modify the onScrub function:
-const onScrub = useCallback(({ proportion }) => {
-  // Skip preview handling on WebOS 3.5
-  const isLegacyWebOS = utils.isTv() && 
-    window.webOS && 
-    window.webOS.device && 
-    (parseFloat(window.webOS.device.platformVersion) <= 3.5);
-
-  if (isLegacyWebOS) {
-    return;
-  }
-  
-  // Original preview code
-  if (previews.chunks.length > 0 && proportion && !isNaN(proportion)) {
-    const chunk = previews.chunks[Math.floor(proportion * previews.chunks.length)];
-    if (chunk) {
-      setPreview(chunk.url);
-    } else {
-      setPreview(null);
+    // Check if we're running on WebOS 3.5 or lower
+    const isLegacyWebOS = utils.isTv() && 
+        window.webOS && 
+        window.webOS.device && 
+        (parseFloat(window.webOS.device.platformVersion) <= 4);
+    
+    // Skip thumbnail generation completely for WebOS 3.5
+    if (isLegacyWebOS) {
+        return { chunks: [] };
     }
-  }
-}, [previews, setPreview]);
+    
+    // Original code for other devices
+    const headResponse = await fetchUtils.customFetch(bif, { method: 'HEAD' })
+    /** @type {Array<{start: int, end: int, url: string}>} */
+    const chunks = []
+    if (headResponse.ok) {
+        const totalSize = parseInt(headResponse.headers.get('Content-Length'))
+        if (isNaN(totalSize) || !totalSize) {
+            return { chunks }
+        }
+
+        const { bifData, requests } = await downloadBifFile(bif)
+        await Promise.all(requests)
+
+        const dv = new DataView(bifData.buffer)
+        let magic = ''
+        for (let i = 0; i < 4; i++) {
+            magic += String.fromCharCode(dv.getUint8(i))
+        }
+        // eslint-disable-next-line
+        if (magic === 'BIF1') {
+            const version = dv.getUint32(4, true)
+            const imageCount = dv.getUint32(8, true)
+            const timestampMult = dv.getUint32(12, true) || 1000
+
+            const bifOffsetLoc = version === 0 ? 64 : 20
+            for (let i = 0; i < imageCount; i++) {
+                const timestampOffset = bifOffsetLoc + 8 * i
+                const imageOffset = timestampOffset + 4
+
+                const timestamp = dv.getUint32(timestampOffset, true)
+                const offset = dv.getUint32(imageOffset, true)
+
+                let end = totalSize
+                if (i < imageCount - 1) {
+                    end = dv.getUint32(imageOffset + 8, true)
+                }
+
+                const blob = new Blob([bifData.slice(offset, end)])
+                chunks.push({
+                    start: timestamp / timestampMult,
+                    end: end,
+                    url: window.URL.createObjectURL(blob),
+                })
+            }
+        }
+    }
+
+    return { chunks }
+}
 
 /**
  * @param {{ content: Object }}
@@ -499,10 +513,11 @@ const modifierDashRequest = (profile) => {
  * @param {import('dashjs-webos5').MediaPlayerClass} dashPlayer
  */
 const setStreamingConfig = async (dashPlayer) => {
-
     let bufferTimeAtTopQuality = 150
     let bufferTimeAtTopQualityLongForm = 300
     let initialBufferLevel = 16
+    let bufferToKeep = 12
+    let bufferPruningInterval = 8
 
     if (utils.isTv()) {
         const parseRamSizeInGB = (ddrSizeString) => {
@@ -515,32 +530,47 @@ const setStreamingConfig = async (dashPlayer) => {
         const ramInGB = parseRamSizeInGB(deviceInfo.ddrSize || '1G')
         const is4K = deviceInfo.screenWidth >= 3840 && deviceInfo.screenHeight >= 2160
         const hasHDR = !!(deviceInfo.hdr10 || deviceInfo.dolbyVision)
+        const platformVersion = parseFloat(deviceInfo.platformVersion || '0')
+        
+        // WebOS 3.5 or lower requires more conservative settings
+        const isLegacyWebOS = platformVersion <= 4;
 
-        const score = (ramInGB * 2) + (is4K ? 1 : 0) + (hasHDR ? 1 : 0)
-
-        if (score >= 6) {
-            // Gama alta
-            bufferTimeAtTopQuality = 180
-            bufferTimeAtTopQualityLongForm = 320
-            initialBufferLevel = 24
-        } else if (score >= 5) {
-            // Gama media-alta (como tu WebOS 5)
-            bufferTimeAtTopQuality = 144
-            bufferTimeAtTopQualityLongForm = 280
-            initialBufferLevel = 20
-        } else if (score >= 3.5) {
-            // Gama media
-            bufferTimeAtTopQuality = 128
-            bufferTimeAtTopQualityLongForm = 240
-            initialBufferLevel = 18
+        if (isLegacyWebOS) {
+            // Much more conservative settings for WebOS 3.5
+            bufferTimeAtTopQuality = 60
+            bufferTimeAtTopQualityLongForm = 120
+            initialBufferLevel = 8
+            bufferToKeep = 6
+            bufferPruningInterval = 4
         } else {
-            // Gama baja
-            bufferTimeAtTopQuality = 96
-            bufferTimeAtTopQualityLongForm = 180
-            initialBufferLevel = 14
+            // Regular score-based settings for newer WebOS
+            const score = (ramInGB * 2) + (is4K ? 1 : 0) + (hasHDR ? 1 : 0)
+
+            if (score >= 6) {
+                // Gama alta
+                bufferTimeAtTopQuality = 180
+                bufferTimeAtTopQualityLongForm = 320
+                initialBufferLevel = 24
+            } else if (score >= 5) {
+                // Gama media-alta (como tu WebOS 5)
+                bufferTimeAtTopQuality = 144
+                bufferTimeAtTopQualityLongForm = 280
+                initialBufferLevel = 20
+            } else if (score >= 3.5) {
+                // Gama media
+                bufferTimeAtTopQuality = 128
+                bufferTimeAtTopQualityLongForm = 240
+                initialBufferLevel = 18
+            } else {
+                // Gama baja
+                bufferTimeAtTopQuality = 96
+                bufferTimeAtTopQualityLongForm = 180
+                initialBufferLevel = 14
+            }
         }
     }
 
+    // Update the settings with our values
     dashPlayer.updateSettings({
         streaming: {
             buffer: {
@@ -549,8 +579,8 @@ const setStreamingConfig = async (dashPlayer) => {
                 bufferTimeAtTopQualityLongForm,
                 longFormContentDurationThreshold: 600,
                 fastSwitchEnabled: true,
-                bufferToKeep: 12,
-                bufferPruningInterval: 8,
+                bufferToKeep,
+                bufferPruningInterval,
                 initialBufferLevel,
             },
             abr: {
@@ -558,9 +588,10 @@ const setStreamingConfig = async (dashPlayer) => {
                     audio: true,
                     video: true
                 },
-                initialBitrate: { audio: -1, video: -1 },
-                // IA recomendation
-                // initialBitrate: { audio: 96000, video: 2000000 },
+                initialBitrate: { 
+                    audio: -1, 
+                    video: -1 
+                },
                 limitBitrateByPortal: true
             },
         }
@@ -774,16 +805,28 @@ const Player = ({ ...rest }) => {
     }, [stream, setSubtitle])
 
     /** @type {Function} */
-    const onScrub = useCallback(({ proportion }) => {
-        if (previews.chunks.length > 0 && proportion && !isNaN(proportion)) {
-            const chunk = previews.chunks[Math.floor(proportion * previews.chunks.length)]
-            if (chunk) {
-                setPreview(chunk.url)
-            } else {
-                setPreview(null)
-            }
+const onScrub = useCallback(({ proportion }) => {
+    // Check if we're running on WebOS 3.5 or lower
+    const isLegacyWebOS = utils.isTv() && 
+        window.webOS && 
+        window.webOS.device && 
+        (parseFloat(window.webOS.device.platformVersion) <= 4);
+
+    // Skip preview handling on WebOS 3.5
+    if (isLegacyWebOS) {
+        return;
+    }
+    
+    // Original preview handling
+    if (previews.chunks.length > 0 && proportion && !isNaN(proportion)) {
+        const chunk = previews.chunks[Math.floor(proportion * previews.chunks.length)]
+        if (chunk) {
+            setPreview(chunk.url)
+        } else {
+            setPreview(null)
         }
-    }, [previews, setPreview])
+    }
+}, [previews, setPreview])
 
     /** @type {Function} */
     const onChangeEp = useCallback(async (changeEp) => {
