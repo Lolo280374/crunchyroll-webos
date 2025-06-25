@@ -79,6 +79,7 @@ jobs:
         # Disable treating warnings as errors in CI
         echo "ESLINT_NO_DEV_ERRORS=true" >> $GITHUB_ENV
         
+    # Build service component and prepare service directory for the main app
     - name: Build Service Component First
       working-directory: ./webos-crunchy
       run: |
@@ -88,36 +89,39 @@ jobs:
         mkdir -p crunchyroll-webos/service
         # Copy the built service files to where the main app expects them
         cp -r crunchyroll-webos-service/dist crunchyroll-webos/service/
-        # List directories to verify
-        ls -la crunchyroll-webos/service
-        
-    - name: Prepare Service Directory
-      working-directory: ./webos-crunchy/crunchyroll-webos/service
-      run: |
-        # Create a package.json with --no-optional flag to prevent fsevents error
-        cat > package.json << 'EOF'
+        # Add a dummy package.json with a build script
+        cat > crunchyroll-webos/service/package.json << 'EOF'
         {
           "name": "crunchyroll-service",
           "version": "1.0.0",
           "description": "Crunchyroll WebOS Service",
           "scripts": {
-            "test": "echo \"No tests specified\""
+            "build": "echo \"Service already built - skipping\""
           }
         }
         EOF
-        # Create an empty .npmrc file to avoid optional dependencies
-        echo "optional=false" > .npmrc
-        echo "fund=false" >> .npmrc
+        # List directories to verify
+        ls -la crunchyroll-webos/service
+        
+    - name: Modify gulpfile to skip service tasks
+      working-directory: ./webos-crunchy/crunchyroll-webos
+      run: |
+        # Make a backup of the original gulpfile
+        cp gulpfile.mjs gulpfile.mjs.bak
+        
+        # Replace service installation and build tasks with no-op tasks
+        sed -i 's/cd service; NODE_ENV=development npm ci/echo "Skipping service npm ci in CI"/' gulpfile.mjs
+        sed -i 's/cd service; npm run build;/echo "Skipping service build in CI"/' gulpfile.mjs
+        
+        # Verify our changes
+        echo "Changes made to gulpfile.mjs:"
+        diff gulpfile.mjs.bak gulpfile.mjs || true
         
     - name: Build application
       working-directory: ./webos-crunchy/crunchyroll-webos
       env:
         CI: false  # Turn off treating warnings as errors
       run: |
-        # Replace the problematic service installation script in your build-dev task
-        # This is a temporary fix for CI only
-        sed -i 's/cd service; NODE_ENV=development npm ci/echo "Skipping service npm ci in CI"/' gulpfile.mjs || true
-        
         # Default to dev build for automated pushes
         if [[ "${{ github.event_name }}" == "workflow_dispatch" && "${{ github.event.inputs.build_type }}" == "prod" ]]; then
           npm run build-p
