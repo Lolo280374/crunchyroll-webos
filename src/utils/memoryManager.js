@@ -138,6 +138,74 @@ class MemoryManager {
     }
   }
   
+// Add to our MemoryManager class
+
+/**
+ * Activate media playback mode - aggressively free memory
+ */
+activateMediaMode() {
+  console.log("Media playback mode activated - freeing memory");
+  
+  // Release ALL images except player-related ones
+  this.imageCache.forEach((imgElement, src) => {
+    // Skip player-related images
+    if (src.includes('player') || imgElement.closest('.moon-VideoPlayer')) {
+      return;
+    }
+    
+    // Release all other images regardless of visibility
+    this.releaseImage(src);
+  });
+  
+  // Force garbage collection
+  if (window.gc) window.gc();
+  
+  // Clear all CSS background images
+  document.querySelectorAll('[style*="background-image"]').forEach(element => {
+    // Skip player elements
+    if (element.closest('.moon-VideoPlayer')) {
+      return;
+    }
+    
+    // Store original background if needed later
+    if (!element.getAttribute('data-original-background')) {
+      element.setAttribute('data-original-background', element.style.backgroundImage);
+    }
+    element.style.backgroundImage = 'none';
+  });
+  
+  // Clear other caches
+  if (window.caches) {
+    window.caches.keys().then(names => {
+      names.forEach(name => {
+        window.caches.delete(name);
+      });
+    });
+  }
+  
+  // Request low-priority memory cleanup from the system
+  if (window.webOS && window.webOS.systemService) {
+    window.webOS.systemService.request("luna://com.webos.service.memorymanager", {
+      method: "clearMemory",
+      parameters: { priority: "normal" }
+    });
+  }
+}
+
+/**
+ * Deactivate media mode - restore normal operation
+ */
+deactivateMediaMode() {
+  console.log("Media playback mode deactivated - normal memory management");
+  
+  // Restore background images if needed
+  document.querySelectorAll('[data-original-background]').forEach(element => {
+    element.style.backgroundImage = element.getAttribute('data-original-background');
+  });
+  
+  // Normal memory management will resume automatically
+}
+
   /**
    * Cleanup unused images
    */

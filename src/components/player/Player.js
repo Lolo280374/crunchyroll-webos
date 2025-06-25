@@ -26,6 +26,7 @@ import back from '../../back'
 import { _PLAY_TEST_, _LOCALHOST_SERVER_ } from '../../const'
 import XHRLoader from '../../patch/XHRLoader'
 import utils from '../../utils'
+import MemoryManager from '../../utils/memoryManager'
 
 
 /**
@@ -792,6 +793,25 @@ const Player = ({ ...rest }) => {
     /** @type {[String, Function]}  */
     const [message, setMessage] = useState('')
 
+    // Add memory management hook here
+    useEffect(() => {
+        // Activate memory saving mode when player mounts - frees UI memory
+        if (MemoryManager.instance) {
+            logger.info("Player: Activating media mode to free memory");
+            MemoryManager.instance.activateMediaMode();
+        } else {
+            logger.warn("Player: MemoryManager instance not found");
+        }
+        
+        return () => {
+            // Restore regular memory management when player unmounts
+            if (MemoryManager.instance) {
+                logger.info("Player: Deactivating media mode");
+                MemoryManager.instance.deactivateMediaMode();
+            }
+        };
+    }, []);
+
     /** @type {Function} */
     const selectAudio = useCallback((select) => {
         setAudio(audios[select])
@@ -805,28 +825,28 @@ const Player = ({ ...rest }) => {
     }, [stream, setSubtitle])
 
     /** @type {Function} */
-const onScrub = useCallback(({ proportion }) => {
-    // Check if we're running on WebOS 3.5 or lower
-    const isLegacyWebOS = utils.isTv() && 
-        window.webOS && 
-        window.webOS.device && 
-        (parseFloat(window.webOS.device.platformVersion) <= 4);
+    const onScrub = useCallback(({ proportion }) => {
+        // Check if we're running on WebOS 3.5 or lower
+        const isLegacyWebOS = utils.isTv() && 
+            window.webOS && 
+            window.webOS.device && 
+            (parseFloat(window.webOS.device.platformVersion) <= 4);
 
-    // Skip preview handling on WebOS 3.5
-    if (isLegacyWebOS) {
-        return;
-    }
-    
-    // Original preview handling
-    if (previews.chunks.length > 0 && proportion && !isNaN(proportion)) {
-        const chunk = previews.chunks[Math.floor(proportion * previews.chunks.length)]
-        if (chunk) {
-            setPreview(chunk.url)
-        } else {
-            setPreview(null)
+        // Skip preview handling on WebOS 3.5
+        if (isLegacyWebOS) {
+            return;
         }
-    }
-}, [previews, setPreview])
+        
+        // Original preview handling
+        if (previews.chunks.length > 0 && proportion && !isNaN(proportion)) {
+            const chunk = previews.chunks[Math.floor(proportion * previews.chunks.length)]
+            if (chunk) {
+                setPreview(chunk.url)
+            } else {
+                setPreview(null)
+            }
+        }
+    }, [previews, setPreview])
 
     /** @type {Function} */
     const onChangeEp = useCallback(async (changeEp) => {
@@ -994,33 +1014,6 @@ const onScrub = useCallback(({ proportion }) => {
                         playerRef.current.play()
                         setLoading(false)
                         setIsPaused(false)
-                        /* how to log, add function and off events in clean up function
-                        const logPlayer = (name) => ev => {
-                            if (name === 'ERROR') {
-                                console.log(name, ev)
-                            }
-                        }
-                        player.updateSettings({ debug: { logLevel: dashjsBase.Debug.LOG_LEVEL_DEBUG } })
-                        player.on(dashjsBase.MediaPlayer.events.MANIFEST_LOADED, logPlayer('MANIFEST_LOADED'))
-                        player.on(dashjsBase.MediaPlayer.events.MANIFEST_LOADING_FINISHED, logPlayer('MANIFEST_LOADING_FINISHED'))
-                        player.on(dashjsBase.MediaPlayer.events.MANIFEST_LOADING_STARTED, logPlayer('MANIFEST_LOADING_STARTED'))
-                        player.on(dashjsBase.MediaPlayer.events.MANIFEST_VALIDITY_CHANGED, logPlayer('MANIFEST_VALIDITY_CHANGED'))
-                        player.on(dashjsBase.MediaPlayer.events.BUFFER_EMPTY, logPlayer('BUFFER_EMPTY'))
-                        player.on(dashjsBase.MediaPlayer.events.BUFFER_LOADED, logPlayer('BUFFER_LOADED'))
-                        player.on(dashjsBase.MediaPlayer.events.FRAGMENT_LOADING_STARTED, logPlayer('FRAGMENT_LOADING_STARTED'))
-                        player.on(dashjsBase.MediaPlayer.events.FRAGMENT_LOADING_PROGRESS, logPlayer('FRAGMENT_LOADING_PROGRESS'))
-                        player.on(dashjsBase.MediaPlayer.events.FRAGMENT_LOADING_COMPLETED, logPlayer('FRAGMENT_LOADING_COMPLETED'))
-                        player.on(dashjsBase.MediaPlayer.events.ERROR, logPlayer('ERROR'))
-                        player.on(dashjsBase.MediaPlayer.events.KEY_ERROR, logPlayer('KEY_ERROR'))
-                        player.on(dashjsBase.MediaPlayer.events.PLAYBACK_ERROR, logPlayer('PLAYBACK_ERROR'))
-                        player.on(dashjs.MediaPlayer.events.QUALITY_CHANGE_REQUESTED, e => {
-                            console.log('Cambio de calidad solicitado:', e.mediaType, 'nivel:', e.newQuality);
-                        })
-                        player.on(dashjs.MediaPlayer.events.FRAGMENT_LOADING_COMPLETED, e => {
-                            console.log('Fragment:', e.mediaType, 'bytes:', e.bytesLength, 'tiempo(ms):',
-                                e.request.finishTime - e.request.responseTime);
-                        })
-                        */
                     }).catch(handleCrunchyError)
                 }
             }, 100)
