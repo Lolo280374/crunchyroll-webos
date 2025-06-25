@@ -1,4 +1,3 @@
-
 import { useEffect, useState, useCallback, useMemo } from 'react'
 import MoonstoneDecorator from '@enact/moonstone/MoonstoneDecorator'
 import { Panels, Routable, Route } from '@enact/moonstone/Panels'
@@ -52,6 +51,19 @@ const App = ({ ...rest }) => {
             window.close()
         }
     }, [])
+
+    // Add memory manager initialization useEffect INSIDE the component
+    useEffect(() => {
+        // Initialize memory management for WebOS 3.5
+        const cleanupMemoryManager = MemoryManager.initialize();
+        
+        // Return cleanup function
+        return () => {
+            if (cleanupMemoryManager) {
+                cleanupMemoryManager();
+            }
+        };
+    }, []);
 
     useEffect(() => {
         const loadData = async () => {
@@ -143,17 +155,6 @@ const AppLocal = I18nDecorator({
 
 const AppTheme = MoonstoneDecorator(AppLocal)
 
-// Add this inside your App component
-useEffect(() => {
-  // Initialize memory management for WebOS 3.5
-  const cleanupMemoryManager = MemoryManager.initialize();
-  
-  // Return cleanup function
-  return () => {
-    if (cleanupMemoryManager) {
-      cleanupMemoryManager();
-    }
-  };
-}, []);
+// Remove this useEffect from here - it needs to be inside the component
 
 export default AppTheme
