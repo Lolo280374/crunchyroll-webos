@@ -26,7 +26,6 @@ import back from '../../back'
 import { _PLAY_TEST_, _LOCALHOST_SERVER_ } from '../../const'
 import XHRLoader from '../../patch/XHRLoader'
 import utils from '../../utils'
-import { updateAppTitle, computeContentTitle } from '../../appTitle';
 
 
 /**
@@ -780,20 +779,6 @@ const Player = ({ ...rest }) => {
             }
         }
     }, [previews, setPreview])
-
-    // Find the useEffect section that runs when content changes
-useEffect(() => {  
-  if (content) {
-    // Update the app title with the current content
-    const contentTitle = computeContentTitle(content);
-    updateAppTitle(contentTitle);
-    
-    // Make sure to reset title when unmounting
-    return () => {
-      updateAppTitle('');
-    };
-  }
-}, [content]); // Depend on content changes
 
     /** @type {Function} */
     const onChangeEp = useCallback(async (changeEp) => {
