@@ -57,77 +57,14 @@ jobs:
         cd crunchyroll-webos-service && npm install && cd ..
         cd crunchyroll-webos-server && npm install && cd ..
     
-    - name: Fix ESLint issues automatically
+    # New simplified step to fix ESLint issues
+    - name: Fix ESLint issues
       working-directory: ./webos-crunchy/crunchyroll-webos
       run: |
-        # Create a script to fix trailing spaces in all mentioned files
-        cat > fix-eslint-issues.js << 'EOF'
-        const fs = require('fs');
-        const path = require('path');
-
-        const filesToFix = [
-          'src/App/App.js',
-          'src/components/OptimizedImage.js',
-          'src/components/grid/ContentGrid.js',
-          'src/components/grid/ContentGridItems.js',
-          'src/utils/gridConfig.js', 
-          'src/utils/memoryManager.js'
-        ];
-
-        // Function to remove trailing spaces
-        function removeTrailingSpaces(filePath) {
-          try {
-            if (fs.existsSync(filePath)) {
-              console.log(`Fixing trailing spaces in: ${filePath}`);
-              let content = fs.readFileSync(filePath, 'utf8');
-              
-              // Remove trailing spaces
-              content = content.replace(/[ \t]+$/gm, '');
-              
-              // Fix unused React import if it exists
-              if (filePath.includes('OptimizedImage.js')) {
-                content = content.replace(/import React.*from 'react'/, "import { useState, useEffect, useRef } from 'react'");
-              }
-              
-              // Fix JSX props arrow functions by adding a comment to disable the rule
-              if (content.includes('imageComponent={(imgProps)') || content.includes('onFocus=')) {
-                content = content.replace(
-                  /imageComponent={\(imgProps\)/g, 
-                  '/* eslint-disable-next-line react/jsx-no-bind */\n            imageComponent={(imgProps)'
-                );
-                content = content.replace(
-                  /onFocus=/g,
-                  '/* eslint-disable-next-line react/jsx-no-bind */\n                onFocus='
-                );
-              }
-              
-              fs.writeFileSync(filePath, content);
-              return true;
-            } else {
-              console.warn(`File not found: ${filePath}`);
-              return false;
-            }
-          } catch (error) {
-            console.error(`Error fixing ${filePath}:`, error);
-            return false;
-          }
-        }
-
-        let fixedCount = 0;
-        for (const file of filesToFix) {
-          if (removeTrailingSpaces(file)) {
-            fixedCount++;
-          }
-        }
-
-        console.log(`Fixed ESLint issues in ${fixedCount} files`);
-        EOF
-        
-        # Run the script to fix issues
-        node fix-eslint-issues.js
-        
-        # Also run eslint fix on all files if needed
-        npx eslint "src/**/*.js" "src/**/*.jsx" --fix || true
+        # Copy the fix-eslint.js script from the main repo (where this workflow file is) to the working directory
+        cp ../../../fix-eslint.js ./
+        # Run the script
+        node fix-eslint.js
         
     - name: Build Service Component First
       working-directory: ./webos-crunchy
