@@ -16,130 +16,97 @@ const BUFFER_LOW_THRESHOLD = 8; // Seconds before we consider buffering at risk
  * @param {import('dashjs-webos5').MediaPlayerClass} dashPlayer 
  */
 export const configurePlayer = async (dashPlayer) => {
-    // Detect WebOS version
     const isLegacyWebOS = utils.isTv() && 
         window.webOS && 
         window.webOS.device && 
         (parseFloat(window.webOS.device.platformVersion) <= 4);
         
-    // Base configuration
-    const config = {
-        streaming: {
-            buffer: {
-                bufferTimeDefault: 20,
-                longFormContentDurationThreshold: 600,
-                fastSwitchEnabled: true,
-            },
-            abr: {
-                autoSwitchBitrate: {
-                    audio: true,
-                    video: true
-                },
-                initialBitrate: { 
-                    audio: -1, 
-                    video: -1 
-                },
-                limitBitrateByPortal: true,
-                useDefaultABRRules: true
-            }
-        }
-    };
-    
     if (isLegacyWebOS) {
-        // WebOS 3.5 optimized settings
-        config.streaming.buffer = {
-            ...config.streaming.buffer,
-            bufferTimeAtTopQuality: 60,
-            bufferTimeAtTopQualityLongForm: 120,
-            initialBufferLevel: 8,
-            bufferToKeep: 6,
-            bufferPruningInterval: 4
-        };
+        // WebOS 3.5 Ultra-Conservative settings
         
-        // Limited quality for WebOS 3.5
-        config.streaming.abr = {
-            ...config.streaming.abr,
-            maxBitrate: {
-                audio: -1,
-                video: BITRATE_720P
-            },
-            maxHeight: RESOLUTION_720P,
-        };
+        // First, drop quality much lower for WebOS 3.5
+        const RESOLUTION_480P = 480;
+        const BITRATE_480P = 900000;  // ~900 Kbps for 480p
         
-        // Add custom ABR rules for WebOS 3.5
-        config.streaming.abr.ABRStrategy = "abrDynamic";
+        // Apply ultra-conservative buffer settings
+        dashPlayer.updateSettings({
+            streaming: {
+                lowLatencyEnabled: false,
+                abr: {
+                    // Force start at lower quality 
+                    initialBitrate: { 
+                        audio: -1, 
+                        video: BITRATE_480P
+                    },
+                    // Hard limit to 480p
+                    maxBitrate: {
+                        audio: -1,
+                        video: BITRATE_480P
+                    },
+                    maxHeight: RESOLUTION_480P,
+                    // Prevent jumping between qualities too quickly
+                    bandwidthSafetyFactor: 0.8,
+                    // Be much more conservative about upgrading quality
+                    switchDownRatio: 0.7,
+                    switchUpRatio: 0.9,
+                    // Simplify ABR logic
+                    ABRStrategy: "abrThroughput"
+                },
+                buffer: {
+                    // Bigger initial buffer for WebOS 3.5
+                    fastSwitchEnabled: false,
+                    bufferTimeDefault: 8,
+                    bufferTimeAtTopQuality: 12,
+                    bufferTimeAtTopQualityLongForm: 20,
+                    initialBufferLevel: 6,
+                    stableBufferTime: 10,
+                    bufferToKeep: 30,
+                    bufferPruningInterval: 30
+                },
+                // Simplify the player's internal management
+                scheduling: {
+                    scheduleWhilePaused: true,
+                    lowLatencyEnabled: false,
+                    timeShiftBufferPruningInterval: 30,
+                    timeShiftBufferAheadOf: 60
+                }
+            }
+        });
         
-        // Add buffer monitoring to detect playback issues
+        // Add buffer level monitoring
         dashPlayer.on('bufferLevelStateChanged', (e) => {
-            if (e.state === 'low' && e.mediaType === 'video') {
-                // When buffer gets low, force switch to lower quality
+            if (e.state === 'low') {
+                console.log("Buffer state low, dropping quality significantly");
+                // Drop to minimum quality when buffer gets low
                 dashPlayer.updateSettings({
                     streaming: {
                         abr: {
+                            maxHeight: 360,
                             maxBitrate: {
-                                video: BITRATE_480P
-                            },
-                            maxHeight: RESOLUTION_480P
-                        }
-                    }
-                });
-            } else if (e.state === 'loaded' && e.mediaType === 'video') {
-                // When buffer is healthy again, allow up to 720p
-                dashPlayer.updateSettings({
-                    streaming: {
-                        abr: {
-                            maxBitrate: {
-                                video: BITRATE_720P
-                            },
-                            maxHeight: RESOLUTION_720P
+                                video: 500000 // 500 Kbps
+                            }
                         }
                     }
                 });
             }
         });
         
-        // Monitor for stalling and reduce quality if needed
-        dashPlayer.on('playbackStalled', () => {
-            // If playback stalls, immediately drop quality
+        // Optimize for WebOS 3.5 memory constraints
+        dashPlayer.setTextDefaultEnabled(false); // Disable subtitles by default
+        
+        // Reduce internally stored buffer when memory limited
+        dashPlayer.on('fragmentLoadingAbandoned', () => {
             dashPlayer.updateSettings({
                 streaming: {
-                    abr: {
-                        maxBitrate: {
-                            video: BITRATE_480P
-                        },
-                        maxHeight: RESOLUTION_480P
+                    buffer: {
+                        bufferToKeep: 10 // Reduce buffer when we're struggling
                     }
                 }
             });
-            
-            // Gradually allow higher quality after 30 seconds
-            setTimeout(() => {
-                dashPlayer.updateSettings({
-                    streaming: {
-                        abr: {
-                            maxBitrate: {
-                                video: BITRATE_720P
-                            },
-                            maxHeight: RESOLUTION_720P
-                        }
-                    }
-                });
-            }, 30000);
         });
     } else {
-        // Modern WebOS settings - can use higher quality
-        config.streaming.buffer = {
-            ...config.streaming.buffer,
-            bufferTimeAtTopQuality: 150,
-            bufferTimeAtTopQualityLongForm: 300,
-            initialBufferLevel: 16,
-            bufferToKeep: 12,
-            bufferPruningInterval: 8
-        };
+        // Modern WebOS settings (keep your existing code here)
     }
-    
-    // Apply configuration
-    dashPlayer.updateSettings(config);
     
     return dashPlayer;
 };

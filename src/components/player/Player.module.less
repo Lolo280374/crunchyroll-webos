@@ -1,0 +1,28 @@
+/* Add to your Player.module.less or create if needed */
+
+:global(.webos35-mode) {
+  /* Optimize rendering performance */
+  * {
+    will-change: auto !important; /* Disable will-change optimization that can use up memory */
+  }
+  
+  /* Simplify shadows and effects */
+  .moon-VideoPlayer {
+    box-shadow: none !important;
+  }
+  
+  /* Minimize UI transitions */
+  .moon-VideoPlayer_controlsFrame,
+  .moon-VideoPlayer_bottomControl,
+  .moon-VideoPlayer_mediaControls,
+  .moon-Slider {
+    transition-duration: 0.2s !important;
+  }
+  
+  /* Disable background effects */
+  .moon-VideoPlayer:before,
+  .moon-VideoPlayer:after {
+    opacity: 0 !important;
+    display: none !important;
+  }
+}

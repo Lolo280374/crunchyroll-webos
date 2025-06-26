@@ -17,22 +17,44 @@ const optimizeVideoElement = (videoElement) => {
   
   // WebOS-specific optimizations
   if (window.webOS) {
-    // Reduce video element dimensions very slightly to prevent edge rendering issues
-    // This helps WebOS 3.5 with graphics rendering
-    videoElement.style.width = '99.5%';
-    videoElement.style.height = '99.5%';
+    // Check for WebOS 3.5
+    const isLegacyWebOS = window.webOS.device && 
+      parseFloat(window.webOS.device.platformVersion) <= 4;
     
-    // WebOS 3.5 specific codec hints
-    if (window.webOS.device && parseFloat(window.webOS.device.platformVersion) <= 4) {
-      // Add WebOS-specific attributes if they exist
+    if (isLegacyWebOS) {
+      // ULTRA-LIGHTWEIGHT MODE
+      
+      // 1. Reduce video element size to reduce decode work
+      videoElement.style.width = '99%';
+      videoElement.style.height = '99%';
+      
+      // 2. Disable shadows and complex effects around video
+      const videoParent = videoElement.parentElement;
+      if (videoParent) {
+        videoParent.style.boxShadow = 'none';
+        videoParent.style.webkitFilter = 'none';
+      }
+      
+      // 3. Reduce animation frames for video controls
+      document.documentElement.style.setProperty('--video-transition', '0s');
+      
+      // 4. Enable WebOS TV-specific optimizations if available
       if (window.webOS.mediaPreferences) {
         window.webOS.mediaPreferences.setPreferences(videoElement, {
           mediaCodec: 'h264',
           frameRateMode: 'fixed',
           decoderPriority: 'hardware',
-          bufferSize: 'large'
+          bufferSize: 'small',
+          // Override to prioritize stability over quality
+          mediaQuality: 'standard' 
         });
       }
+      
+      // 5. Simplify reflection effects
+      const reflections = document.querySelectorAll('.reflection, .shadow');
+      reflections.forEach(el => {
+        el.style.display = 'none';
+      });
     }
   }
 };

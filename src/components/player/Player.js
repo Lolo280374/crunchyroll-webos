@@ -818,6 +818,105 @@ const Player = ({ ...rest }) => {
         };
     }, []);
 
+// In your Player component, add this useEffect for WebOS 3.5
+
+useEffect(() => {
+  // Check if we're on WebOS 3.5
+  const isLegacyWebOS = utils.isTv() && 
+    window.webOS && 
+    window.webOS.device && 
+    (parseFloat(window.webOS.device.platformVersion) <= 4);
+    
+  if (isLegacyWebOS) {
+    // Make video controls simpler for WebOS 3.5
+    document.body.classList.add('webos35-mode');
+    
+    // 1. Disable thumbnails completely for WebOS 3.5
+    setPreviews({ chunks: [] });
+    
+    // 2. Simplify video controls - hide unnecessary buttons when not focused
+    const simplifyControls = () => {
+      const controls = document.querySelectorAll('.moon-VideoPlayer_controlsFrame');
+      controls.forEach(control => {
+        control.classList.add('simplified-controls');
+      });
+    };
+    
+    // Apply simplifications after component is mounted
+    setTimeout(simplifyControls, 1000);
+    
+    // 3. Disable complex animations in the player
+    const styleElement = document.createElement('style');
+    styleElement.textContent = `
+      .webos35-mode .moon-VideoPlayer_controlsFrame {
+        transition: opacity 0.2s linear !important;
+      }
+      .webos35-mode .moon-Slider_fill,
+      .webos35-mode .moon-Slider_knob {
+        transition: all 0.1s linear !important;
+      }
+      .webos35-mode .simplified-controls:not(:focus-within) .rightComponents,
+      .webos35-mode .simplified-controls:not(:focus-within) .leftComponents {
+        opacity: 0.5;
+        transform: scale(0.9);
+      }
+    `;
+    document.head.appendChild(styleElement);
+    
+    // 4. Monitor video performance and reduce quality if needed
+    let frameDropMonitor = null;
+    if (playerRef.current) {
+      let lastDroppedFrames = 0;
+      let highDropRateCount = 0;
+      
+      frameDropMonitor = setInterval(() => {
+        try {
+          const metrics = playerRef.current.getMetricsFor('video');
+          const droppedFrames = playerRef.current.getDroppedFrames();
+          
+          if (droppedFrames && lastDroppedFrames) {
+            const newDroppedFrames = droppedFrames.droppedFrames - lastDroppedFrames;
+            const dropRate = newDroppedFrames / 30; // Assuming 30fps target
+            
+            if (dropRate > 0.1) { // More than 10% frames dropped
+              highDropRateCount++;
+              
+              if (highDropRateCount >= 3) {
+                // Consistent frame drops - reduce quality even more
+                playerRef.current.updateSettings({
+                  streaming: {
+                    abr: {
+                      maxHeight: 360,
+                      maxBitrate: {
+                        video: 500000 // 500 Kbps
+                      }
+                    }
+                  }
+                });
+                console.log("Reducing quality due to dropped frames");
+              }
+            } else {
+              highDropRateCount = Math.max(0, highDropRateCount - 1);
+            }
+            
+            lastDroppedFrames = droppedFrames.droppedFrames;
+          } else if (droppedFrames) {
+            lastDroppedFrames = droppedFrames.droppedFrames;
+          }
+        } catch (e) {
+          console.error("Error monitoring frame drops", e);
+        }
+      }, 5000);
+    }
+    
+    return () => {
+      document.body.classList.remove('webos35-mode');
+      if (frameDropMonitor) clearInterval(frameDropMonitor);
+      if (styleElement) styleElement.remove();
+    };
+  }
+}, [playerRef]);
+
 useEffect(() => {
   // Engage extreme performance mode for playback
   const networkManager = NetworkManager.getInstance();
