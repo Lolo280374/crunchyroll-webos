@@ -10,14 +10,28 @@ class DOMFreezer {
     this.resizeObserver = null;
     this.deferredUpdates = [];
     
-    // Elements that should always be updated
+    // Elements that should always be updated - correct syntax for selectors
     this.allowedSelectors = [
       '.moon-VideoPlayer',
       '.moon-VideoPlayer *',
       '#skip-button',
       '#media-controls',
       '.player-overlay'
-    ].join(',');
+    ];
+  }
+  
+  /**
+   * Check if an element should be allowed to update during freeze
+   */
+  isAllowedElement(element) {
+    return this.allowedSelectors.some(selector => {
+      try {
+        return element.matches(selector) || 
+               element.closest(selector) !== null;
+      } catch (e) {
+        return false;
+      }
+    });
   }
   
   /**
@@ -92,17 +106,21 @@ class DOMFreezer {
    * Pause DOM observers
    */
   pauseObservers() {
-    // Disconnect any existing observers
-    if (window.MutationObserver) {
-      document.querySelectorAll('*:not(' + this.allowedSelectors + ')').forEach(el => {
-        const observers = el._domFreezerObservers;
-        if (observers) {
-          if (observers.mutation) observers.mutation.disconnect();
-          if (observers.intersection) observers.intersection.disconnect();
-          if (observers.resize) observers.resize.disconnect();
-        }
-      });
-    }
+    // Instead of using invalid selector, iterate through all elements
+    const elements = document.querySelectorAll('*');
+    elements.forEach(el => {
+      // Skip player elements
+      if (this.isAllowedElement(el)) {
+        return;
+      }
+      
+      const observers = el._domFreezerObservers;
+      if (observers) {
+        if (observers.mutation) observers.mutation.disconnect();
+        if (observers.intersection) observers.intersection.disconnect();
+        if (observers.resize) observers.resize.disconnect();
+      }
+    });
   }
   
   /**
