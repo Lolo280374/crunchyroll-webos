@@ -1,0 +1,46 @@
+/* Extreme optimizations for WebOS 3.5 */
+.webos35-mode video {
+  /* Force low quality rendering */
+  image-rendering: optimizeSpeed !important;
+  image-rendering: pixelated !important;
+  -webkit-transform: translateZ(0);
+  transform: translateZ(0);
+  backface-visibility: hidden;
+}
+
+.webos35-extreme-mode * {
+  /* Disable all animations throughout the app during playback */
+  transition-duration: 0ms !important;
+  animation-duration: 0ms !important;
+}
+
+/* Simplify video player UI */
+.webos35-mode .moon-VideoPlayer_controlsFrame {
+  transition: opacity 0.2s linear !important;
+}
+
+.webos35-mode .moon-Slider_fill,
+.webos35-mode .moon-Slider_knob {
+  transition: none !important;
+  animation: none !important;
+}
+
+/* Hide thumbnails but keep functionality */
+.webos35-mode .moon-VideoPlayer_thumbnail {
+  opacity: 0 !important;
+}
+
+/* Make grid display consistent */
+.webos35-mode :global(.moon-scroller) :global(.scrollerContent) > div {
+  display: grid !important;
+  grid-template-columns: repeat(4, 1fr) !important;
+  grid-gap: 16px !important;
+}
+
+.webos35-mode :global(.contentGrid),
+.webos35-mode :global(.episodeGrid),
+.webos35-mode :global(.seriesGrid) {
+  display: grid !important;
+  grid-template-columns: repeat(4, 1fr) !important; 
+  grid-gap: 16px !important;
+}

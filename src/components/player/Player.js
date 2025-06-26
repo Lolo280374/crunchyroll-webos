@@ -918,6 +918,74 @@ useEffect(() => {
   }
 }, [playerRef]);
 
+// Add this useEffect to implement extreme downscaling
+// Insert it after your existing WebOS 3.5 detection effect
+useEffect(() => {
+  // Reference to the cleanup function
+  let cleanupOptimization = null;
+  
+  // Check if we're on WebOS 3.5
+  const isLegacyWebOS = utils.isTv() && 
+    window.webOS && 
+    window.webOS.device && 
+    (parseFloat(window.webOS.device.platformVersion) <= 4);
+    
+  if (isLegacyWebOS) {
+    // Apply immediate optimizations to document
+    document.body.classList.add('webos35-extreme-mode');
+    
+    // Wait a bit for the video element to be available
+    const applyVideoOptimizations = () => {
+      const videoElement = document.querySelector('video');
+      if (videoElement) {
+        // Extreme downscaling - render at 30% quality and scale up
+        videoElement.style.width = '30%';
+        videoElement.style.height = '30%';
+        videoElement.style.transformOrigin = 'top left';
+        videoElement.style.transform = 'scale(3.33)';
+        videoElement.style.backfaceVisibility = 'hidden';
+        videoElement.style.filter = 'blur(1px)'; // Further reduce quality
+        
+        // Apply optimization to parent container
+        const playerElement = videoElement.closest('.moon-VideoPlayer');
+        if (playerElement) {
+          playerElement.style.willChange = 'auto';
+          playerElement.style.webkitTransform = 'translateZ(0)';
+        }
+        
+        // Apply extra CSS rules
+        const styleEl = document.createElement('style');
+        styleEl.id = 'extreme-video-optimization';
+        styleEl.textContent = `
+          video {
+            will-change: transform;
+            image-rendering: optimizeSpeed !important;
+            image-rendering: pixelated !important;
+          }
+        `;
+        document.head.appendChild(styleEl);
+        
+        // Store cleanup function
+        cleanupOptimization = () => {
+          if (styleEl.parentNode) styleEl.parentNode.removeChild(styleEl);
+        };
+      } else {
+        // Try again if video not found
+        setTimeout(applyVideoOptimizations, 100);
+      }
+    };
+    
+    // Start applying optimizations
+    applyVideoOptimizations();
+  }
+  
+  return () => {
+    // Clean up
+    if (cleanupOptimization) cleanupOptimization();
+    document.body.classList.remove('webos35-extreme-mode');
+  };
+}, []);
+
 // Add this useEffect right after your other useEffects
 useEffect(() => {
   if (playerRef.current && !loading) {

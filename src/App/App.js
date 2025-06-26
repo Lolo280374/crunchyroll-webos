@@ -29,6 +29,7 @@ import utils from '../utils'
 import back from '../back'
 import css from './App.module.less'
 import './attachErrorHandler'
+import '../webos35-optimizations.css';
 
 
 const RoutablePanels = Routable({ navigate: 'onBack' }, Panels)
