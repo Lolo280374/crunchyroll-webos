@@ -1,0 +1,36 @@
+/* Grid layout fix for WebOS 3.5 */
+.gridContainer {
+  display: grid !important;
+  grid-template-columns: repeat(4, 1fr) !important; /* Force 4 items per row */
+  grid-gap: 16px !important;
+  padding: 8px !important;
+  width: 100% !important;
+}
+
+/* WebOS 3.5 specific optimizations */
+:global(.webos35) .gridContainer {
+  grid-gap: 12px !important;
+  padding: 6px !important;
+}
+
+.gridItem {
+  position: relative;
+  overflow: hidden;
+  border-radius: 8px;
+}
+
+/* Apply to any grid components in the app */
+:global(.moon-scroller) :global(.scrollerContent) > div {
+  display: grid !important;
+  grid-template-columns: repeat(4, 1fr) !important;
+  grid-gap: 16px !important;
+}
+
+/* Force all content grids to use 4-column layout */
+:global(.contentGrid),
+:global(.episodeGrid),
+:global(.seriesGrid) {
+  display: grid !important;
+  grid-template-columns: repeat(4, 1fr) !important; 
+  grid-gap: 16px !important;
+}

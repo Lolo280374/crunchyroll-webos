@@ -31,6 +31,8 @@ import { configurePlayer } from '../../utils/playerConfig';
 import NetworkManager from '../../utils/networkManager';
 import optimizeVideoElement from '../../utils/videoElementOptimizer';
 import DOMFreezer from '../../utils/domFreezer';
+import { configurePlayer, cleanupPlayer } from '../../utils/playerConfig';
+import QualityDebug from './QualityDebug';
 
 /**
  * @typedef StreamSession
@@ -1423,6 +1425,7 @@ useEffect(() => {
                     </rightComponents>
                 </MediaControls>
             </VideoPlayer>
+            <QualityDebug playerRef={playerRef} loading={loading} />
             <Button id="skip-button"
                 style={{
                     position: 'absolute',

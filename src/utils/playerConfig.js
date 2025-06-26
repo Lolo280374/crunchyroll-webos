@@ -1,15 +1,15 @@
 /**
- * Player configuration optimized for WebOS 3.5
+ * Ultra-aggressive 240p configuration for WebOS 3.5
  */
 
 import utils from '../utils';
 
-// Constants
-const RESOLUTION_480P = 480;
-const BITRATE_480P = 900000;   // ~900 Kbps for 480p
+// Target the absolute lowest quality
+const RESOLUTION_240P = 240;
+const BITRATE_240P = 250000; // 250 Kbps for 240p
 
 /**
- * Configure player for optimal performance based on device
+ * Configure player for optimal performance on WebOS 3.5
  * @param {import('dashjs-webos5').MediaPlayerClass} dashPlayer 
  */
 export const configurePlayer = async (dashPlayer) => {
@@ -20,77 +20,125 @@ export const configurePlayer = async (dashPlayer) => {
         (parseFloat(window.webOS.device.platformVersion) <= 4);
         
     if (isLegacyWebOS) {
-        // AGGRESSIVE QUALITY FORCING FOR WEBOS 3.5
-        console.log("Aggressive 480p enforcement for WebOS 3.5");
+        console.log("ULTRA-LOW QUALITY MODE for WebOS 3.5");
         
-        // 1. Disable ABR completely
+        // Set body class for WebOS 3.5 styling
+        document.body.classList.add('webos35');
+        
+        // Apply extreme low quality settings
         dashPlayer.updateSettings({
-            debug: {
-                logLevel: 0 // Reduce logging overhead
-            },
+            debug: { logLevel: 0 },
             streaming: {
+                buffer: {
+                    // Simplified buffer settings
+                    fastSwitchEnabled: false,
+                    bufferTimeDefault: 12,       // Higher buffers
+                    bufferToKeep: 30,            // Keep more buffer
+                    bufferPruningInterval: 30,   // Clean less frequently
+                    bufferTimeAtTopQuality: 8,   // Not relevant but lower if used
+                    bufferTimeAtTopQualityLongForm: 10, 
+                    // Start with a generous buffer
+                    stableBufferTime: 12,
+                    initialBufferLevel: 10,
+                    // Be more tolerant of stalling
+                    stallThreshold: 0.5
+                },
+                // Disable ABR completely (quality switching)
                 abr: {
                     autoSwitchBitrate: {
-                        audio: true,  // Keep audio adaptive
-                        video: false  // Force video quality
+                        audio: false, 
+                        video: false
                     },
-                    // Cap bitrate very aggressively
+                    // Set initial bitrates as low as possible
+                    initialBitrate: {
+                        audio: 32000,  // 32 Kbps audio
+                        video: BITRATE_240P
+                    },
+                    // Hard limits for WebOS 3.5
                     maxBitrate: {
-                        video: BITRATE_480P
-                    }
+                        audio: 64000,  // 64 Kbps audio max
+                        video: BITRATE_240P
+                    },
+                    // Maximum resolution
+                    maxHeight: RESOLUTION_240P,
+                    // Disable rules that might cause problems
+                    useBufferOccupancyABR: false,
+                    useDeadTimeLatency: false,
+                    // Extremely conservative bandwidth estimates
+                    bandwidthSafetyFactor: 0.5
                 },
-                buffer: {
-                    fastSwitchEnabled: false,
-                    bufferTimeDefault: 10,
-                    bufferTimeAtTopQuality: 20,
-                    initialBufferLevel: 8
-                }
+                // Request handling
+                retryAttempts: {
+                    MPD: 3,
+                    XLinkExpansion: 1, 
+                    InitializationSegment: 3,
+                    IndexSegment: 3,
+                    MediaSegment: 3,
+                    BitstreamSwitchingSegment: 3,
+                    FragmentInfoSegment: 3,
+                    license: 3,
+                    other: 2
+                },
+                // Higher timeouts for network issues
+                fragmentRequestTimeout: 25000,
+                // Never abandon downloads
+                abandonLoadTimeout: 10000
             }
         });
         
-        // 2. Force quality selection at multiple points in the lifecycle
-        
-        // When stream is initialized
+        // Force 240p specifically and repeatedly
         dashPlayer.on('streamInitialized', () => {
-            forceLowestQuality(dashPlayer);
+            force240pQuality(dashPlayer);
         });
         
-        // When tracks are added (failsafe)
         dashPlayer.on('tracksAdded', () => {
-            setTimeout(() => forceLowestQuality(dashPlayer), 100);
+            setTimeout(() => force240pQuality(dashPlayer), 100);
         });
         
-        // When quality changes, force back to low quality
+        dashPlayer.on('qualityChangeRequested', () => {
+            setTimeout(() => force240pQuality(dashPlayer), 50);
+        });
+        
         dashPlayer.on('qualityChangeRendered', () => {
-            setTimeout(() => forceLowestQuality(dashPlayer), 100);
+            setTimeout(() => force240pQuality(dashPlayer), 50);
         });
         
-        // 3. Create a quality enforcement interval
-        const qualityInterval = setInterval(() => {
-            if (dashPlayer.getQualityFor('video') > 0) {
-                forceLowestQuality(dashPlayer);
-            }
-        }, 5000); // Check every 5 seconds
-        
-        // 4. Store the interval for cleanup
+        // Enforce regularly with interval
+        const qualityInterval = setInterval(() => force240pQuality(dashPlayer), 2000);
         dashPlayer._qualityEnforcementInterval = qualityInterval;
+        
+        // Optimize video element
+        const videoEl = dashPlayer.getVideoElement();
+        if (videoEl) {
+            videoEl.disablePictureInPicture = true;
+            videoEl.autoplay = false;
+            videoEl.preload = "auto";
+            
+            // Reduce video element size to ease rendering
+            videoEl.style.width = '98.5%';
+            videoEl.style.height = '98.5%';
+            videoEl.style.transform = 'translateZ(0)';
+            
+            // Apply WebOS TV media optimizations if available
+            if (window.webOS && window.webOS.mediaPreferences) {
+                window.webOS.mediaPreferences.setPreferences(videoEl, {
+                    mediaCodec: 'h264',         // Older, better supported codec
+                    frameRateMode: 'fixed',     // Consistent frame rate
+                    decoderPriority: 'hardware',
+                    bufferSize: 'small',        // Smaller buffers in hardware
+                    mediaQuality: 'minimum'     // Use absolute minimum quality
+                });
+            }
+        }
     } else {
-        // Modern WebOS settings
+        // Modern WebOS settings - keep your standard settings here
         dashPlayer.updateSettings({
             streaming: {
                 buffer: {
                     bufferTimeDefault: 20,
                     bufferTimeAtTopQuality: 150,
                     bufferTimeAtTopQualityLongForm: 300,
-                    initialBufferLevel: 16,
-                    bufferToKeep: 12,
-                    bufferPruningInterval: 8
-                },
-                abr: {
-                    autoSwitchBitrate: {
-                        audio: true,
-                        video: true
-                    }
+                    initialBufferLevel: 16
                 }
             }
         });
@@ -100,50 +148,74 @@ export const configurePlayer = async (dashPlayer) => {
 };
 
 /**
- * Helper function to force lowest quality for video
+ * Force the lowest quality possible (240p)
  */
-function forceLowestQuality(dashPlayer) {
+function force240pQuality(dashPlayer) {
     try {
-        // Force the absolute lowest quality available
+        // Disable auto quality selection
         dashPlayer.setAutoSwitchQualityFor('video', false);
+        dashPlayer.setAutoSwitchQualityFor('audio', false);
         
-        // Most reliable way to get the lowest quality index
+        // Get video qualities
         const videoQualities = dashPlayer.getBitrateInfoListFor('video');
         if (videoQualities && videoQualities.length > 0) {
-            // Find the representation with lowest height ≤ 480p
-            let lowestQualityIdx = 0;
-            let lowestHeight = Infinity;
+            // Find lowest quality (prioritizing 240p specifically)
+            let targetIndex = 0;
+            let targetFound = false;
             let lowestBitrate = Infinity;
             
+            // First pass: look for 240p specifically
             for (let i = 0; i < videoQualities.length; i++) {
                 const quality = videoQualities[i];
-                if (quality.height <= RESOLUTION_480P && 
-                    (quality.height < lowestHeight || 
-                     (quality.height === lowestHeight && quality.bitrate < lowestBitrate))) {
-                    lowestQualityIdx = i;
-                    lowestHeight = quality.height;
-                    lowestBitrate = quality.bitrate;
+                if (quality.height === RESOLUTION_240P) {
+                    if (quality.bitrate < lowestBitrate) {
+                        targetIndex = i;
+                        lowestBitrate = quality.bitrate;
+                        targetFound = true;
+                    }
                 }
             }
             
-            console.log(`Forcing video to lowest quality: ${lowestHeight}p @ ${Math.round(lowestBitrate/1000)}kbps`);
-            dashPlayer.setQualityFor('video', lowestQualityIdx);
+            // Second pass: if no 240p, get the absolute lowest
+            if (!targetFound) {
+                lowestBitrate = Infinity;
+                for (let i = 0; i < videoQualities.length; i++) {
+                    if (videoQualities[i].bitrate < lowestBitrate) {
+                        targetIndex = i;
+                        lowestBitrate = videoQualities[i].bitrate;
+                    }
+                }
+            }
             
-            // Double-check after a short delay
-            setTimeout(() => {
-                const currentQuality = dashPlayer.getQualityFor('video');
-                const currentInfo = videoQualities[currentQuality];
-                console.log(`Current quality: ${currentInfo.height}p @ ${Math.round(currentInfo.bitrate/1000)}kbps`);
-            }, 1000);
+            const targetQuality = videoQualities[targetIndex];
+            console.log(`Forcing quality: ${targetQuality.height}p @ ${Math.round(targetQuality.bitrate/1000)}kbps`);
+            
+            // Set the quality forcefully
+            dashPlayer.setQualityFor('video', targetIndex);
+        }
+        
+        // Also force lowest audio quality
+        const audioQualities = dashPlayer.getBitrateInfoListFor('audio');
+        if (audioQualities && audioQualities.length > 0) {
+            let lowestAudioIndex = 0;
+            let lowestAudioBitrate = Infinity;
+            
+            for (let i = 0; i < audioQualities.length; i++) {
+                if (audioQualities[i].bitrate < lowestAudioBitrate) {
+                    lowestAudioIndex = i;
+                    lowestAudioBitrate = audioQualities[i].bitrate;
+                }
+            }
+            
+            dashPlayer.setQualityFor('audio', lowestAudioIndex);
         }
     } catch (e) {
-        console.error("Error forcing quality:", e);
+        console.error("Error forcing 240p quality", e);
     }
 }
 
-// Add cleanup method to the export
 export const cleanupPlayer = (dashPlayer) => {
-    if (dashPlayer._qualityEnforcementInterval) {
+    if (dashPlayer && dashPlayer._qualityEnforcementInterval) {
         clearInterval(dashPlayer._qualityEnforcementInterval);
     }
 };
