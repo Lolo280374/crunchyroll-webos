@@ -1,7 +1,9 @@
-// Create this new component for better debug display
-
 import React, { useState, useEffect } from 'react';
 
+/**
+ * Component for showing video quality information with countdown
+ * Specifically optimized for WebOS 3.5 
+ */
 const QualityDebug = ({ playerRef, loading }) => {
   const [countdown, setCountdown] = useState(10);
   const [showQuality, setShowQuality] = useState(false);
@@ -58,6 +60,7 @@ const QualityDebug = ({ playerRef, loading }) => {
     }
   }, [loading, playerRef, showQuality]);
   
+  // Don't render if player isn't ready yet
   if (!playerRef.current || loading) return null;
   
   const style = {

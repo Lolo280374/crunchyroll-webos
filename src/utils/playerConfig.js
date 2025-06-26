@@ -214,6 +214,9 @@ function force240pQuality(dashPlayer) {
     }
 }
 
+/**
+ * Cleanup player resources when unmounting
+ */
 export const cleanupPlayer = (dashPlayer) => {
     if (dashPlayer && dashPlayer._qualityEnforcementInterval) {
         clearInterval(dashPlayer._qualityEnforcementInterval);

@@ -27,7 +27,6 @@ import { _PLAY_TEST_, _LOCALHOST_SERVER_ } from '../../const'
 import XHRLoader from '../../patch/XHRLoader'
 import utils from '../../utils'
 import MemoryManager from '../../utils/memoryManager'
-import { configurePlayer } from '../../utils/playerConfig';
 import NetworkManager from '../../utils/networkManager';
 import optimizeVideoElement from '../../utils/videoElementOptimizer';
 import DOMFreezer from '../../utils/domFreezer';
