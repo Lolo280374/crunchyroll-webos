@@ -19,94 +19,136 @@ export const configurePlayer = async (dashPlayer) => {
         window.webOS.device && 
         (parseFloat(window.webOS.device.platformVersion) <= 4);
         
-    // Base configuration
-    const config = {
-        streaming: {
-            buffer: {
-                bufferTimeDefault: 20,
-                longFormContentDurationThreshold: 600,
-                fastSwitchEnabled: true,
-            },
-            abr: {
-                autoSwitchBitrate: {
-                    audio: true,
-                    video: true
-                },
-                initialBitrate: { 
-                    audio: -1, 
-                    video: -1 
-                },
-                limitBitrateByPortal: true,
-                useDefaultABRRules: true
-            }
-        }
-    };
-    
     if (isLegacyWebOS) {
-        // FORCE 480p MODE - Disable Adaptive Bitrate completely for WebOS 3.5
-        config.streaming.abr = {
-            // Turn OFF automatic quality switching
-            autoSwitchBitrate: {
-                audio: true,  // Keep audio adaptive
-                video: false  // Force video quality
-            },
-            // Start at 480p
-            initialBitrate: { 
-                audio: -1, 
-                video: BITRATE_480P
-            },
-            // Hard limit to 480p
-            maxBitrate: {
-                audio: -1,
-                video: BITRATE_480P
-            },
-            maxHeight: RESOLUTION_480P
-        };
+        // AGGRESSIVE QUALITY FORCING FOR WEBOS 3.5
+        console.log("Aggressive 480p enforcement for WebOS 3.5");
         
-        // Conservative buffer settings for stability
-        config.streaming.buffer = {
-            fastSwitchEnabled: false,
-            bufferTimeDefault: 8,
-            bufferTimeAtTopQuality: 12,
-            bufferTimeAtTopQualityLongForm: 20,
-            initialBufferLevel: 6,
-            stableBufferTime: 10,
-            bufferToKeep: 30,
-            bufferPruningInterval: 30
-        };
-        
-        // Turn off quality switching completely
+        // 1. Disable ABR completely
         dashPlayer.updateSettings({
             debug: {
-                logLevel: 0 // Reduce logging to improve performance
+                logLevel: 0 // Reduce logging overhead
             },
-            streaming: config.streaming
+            streaming: {
+                abr: {
+                    autoSwitchBitrate: {
+                        audio: true,  // Keep audio adaptive
+                        video: false  // Force video quality
+                    },
+                    // Cap bitrate very aggressively
+                    maxBitrate: {
+                        video: BITRATE_480P
+                    }
+                },
+                buffer: {
+                    fastSwitchEnabled: false,
+                    bufferTimeDefault: 10,
+                    bufferTimeAtTopQuality: 20,
+                    initialBufferLevel: 8
+                }
+            }
         });
         
-        // Disable ABR Manager to ensure quality doesn't change
+        // 2. Force quality selection at multiple points in the lifecycle
+        
+        // When stream is initialized
         dashPlayer.on('streamInitialized', () => {
-            console.log("Forcing 480p quality for WebOS 3.5");
-            dashPlayer.setQualityFor('video', 0); // Force lowest quality index
+            forceLowestQuality(dashPlayer);
         });
-    } else {
-        // Modern WebOS settings - can use higher quality
-        config.streaming.buffer = {
-            ...config.streaming.buffer,
-            bufferTimeAtTopQuality: 150,
-            bufferTimeAtTopQualityLongForm: 300,
-            initialBufferLevel: 16,
-            bufferToKeep: 12,
-            bufferPruningInterval: 8
-        };
         
+        // When tracks are added (failsafe)
+        dashPlayer.on('tracksAdded', () => {
+            setTimeout(() => forceLowestQuality(dashPlayer), 100);
+        });
+        
+        // When quality changes, force back to low quality
+        dashPlayer.on('qualityChangeRendered', () => {
+            setTimeout(() => forceLowestQuality(dashPlayer), 100);
+        });
+        
+        // 3. Create a quality enforcement interval
+        const qualityInterval = setInterval(() => {
+            if (dashPlayer.getQualityFor('video') > 0) {
+                forceLowestQuality(dashPlayer);
+            }
+        }, 5000); // Check every 5 seconds
+        
+        // 4. Store the interval for cleanup
+        dashPlayer._qualityEnforcementInterval = qualityInterval;
+    } else {
+        // Modern WebOS settings
         dashPlayer.updateSettings({
-            streaming: config.streaming
+            streaming: {
+                buffer: {
+                    bufferTimeDefault: 20,
+                    bufferTimeAtTopQuality: 150,
+                    bufferTimeAtTopQualityLongForm: 300,
+                    initialBufferLevel: 16,
+                    bufferToKeep: 12,
+                    bufferPruningInterval: 8
+                },
+                abr: {
+                    autoSwitchBitrate: {
+                        audio: true,
+                        video: true
+                    }
+                }
+            }
         });
     }
     
     return dashPlayer;
 };
 
+/**
+ * Helper function to force lowest quality for video
+ */
+function forceLowestQuality(dashPlayer) {
+    try {
+        // Force the absolute lowest quality available
+        dashPlayer.setAutoSwitchQualityFor('video', false);
+        
+        // Most reliable way to get the lowest quality index
+        const videoQualities = dashPlayer.getBitrateInfoListFor('video');
+        if (videoQualities && videoQualities.length > 0) {
+            // Find the representation with lowest height ≤ 480p
+            let lowestQualityIdx = 0;
+            let lowestHeight = Infinity;
+            let lowestBitrate = Infinity;
+            
+            for (let i = 0; i < videoQualities.length; i++) {
+                const quality = videoQualities[i];
+                if (quality.height <= RESOLUTION_480P && 
+                    (quality.height < lowestHeight || 
+                     (quality.height === lowestHeight && quality.bitrate < lowestBitrate))) {
+                    lowestQualityIdx = i;
+                    lowestHeight = quality.height;
+                    lowestBitrate = quality.bitrate;
+                }
+            }
+            
+            console.log(`Forcing video to lowest quality: ${lowestHeight}p @ ${Math.round(lowestBitrate/1000)}kbps`);
+            dashPlayer.setQualityFor('video', lowestQualityIdx);
+            
+            // Double-check after a short delay
+            setTimeout(() => {
+                const currentQuality = dashPlayer.getQualityFor('video');
+                const currentInfo = videoQualities[currentQuality];
+                console.log(`Current quality: ${currentInfo.height}p @ ${Math.round(currentInfo.bitrate/1000)}kbps`);
+            }, 1000);
+        }
+    } catch (e) {
+        console.error("Error forcing quality:", e);
+    }
+}
+
+// Add cleanup method to the export
+export const cleanupPlayer = (dashPlayer) => {
+    if (dashPlayer._qualityEnforcementInterval) {
+        clearInterval(dashPlayer._qualityEnforcementInterval);
+    }
+};
+
 export default {
-    configurePlayer
+    configurePlayer,
+    cleanupPlayer
 };

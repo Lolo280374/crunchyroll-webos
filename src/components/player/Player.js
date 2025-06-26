@@ -917,6 +917,44 @@ useEffect(() => {
   }
 }, [playerRef]);
 
+// Add this useEffect right after your other useEffects
+useEffect(() => {
+  if (playerRef.current && !loading) {
+    // Create a debugging element to show current quality
+    const debugDiv = document.createElement('div');
+    debugDiv.id = 'quality-debug';
+    debugDiv.style.position = 'absolute';
+    debugDiv.style.top = '10px';
+    debugDiv.style.left = '10px';
+    debugDiv.style.color = 'white';
+    debugDiv.style.backgroundColor = 'rgba(0,0,0,0.5)';
+    debugDiv.style.padding = '5px';
+    debugDiv.style.zIndex = '9999';
+    document.body.appendChild(debugDiv);
+    
+    // Update quality info every 5 seconds
+    const qualityInterval = setInterval(() => {
+      try {
+        const player = playerRef.current;
+        const videoQualities = player.getBitrateInfoListFor('video');
+        const currentQuality = player.getQualityFor('video');
+        const currentInfo = videoQualities[currentQuality];
+        
+        debugDiv.textContent = `Resolution: ${currentInfo.height}p @ ${Math.round(currentInfo.bitrate/1000)}kbps`;
+      } catch (e) {
+        debugDiv.textContent = 'Error reading quality';
+      }
+    }, 5000);
+    
+    return () => {
+      if (debugDiv && debugDiv.parentNode) {
+        debugDiv.parentNode.removeChild(debugDiv);
+      }
+      clearInterval(qualityInterval);
+    };
+  }
+}, [playerRef, loading]);
+
 useEffect(() => {
   // Engage extreme performance mode for playback
   const networkManager = NetworkManager.getInstance();
@@ -1167,30 +1205,34 @@ useEffect(() => {
     }, [profile, stream, setSubtitle, setPreviews, setSkipEvents])
 
     useEffect(() => {  // attach subs
-        let interval = null
-        if (stream.urls && subtitle && stream.id === content.id) {
-            interval = setInterval(() => {
-                if (playerCompRef.current) {
-                    clearInterval(interval)
-                    createDashPlayer(audio, stream, content, subtitle).then(player => {
-                        playerRef.current = player
-                        playerRef.current.play()
-                        setLoading(false)
-                        setIsPaused(false)
-                    }).catch(handleCrunchyError)
-                }
-            }, 100)
-        }
-        return () => {
-            setLoading(true)
-            if (playerRef.current) {
-                playerRef.current.pause()
-                playerRef.current.destroy()
-                playerRef.current = null
+    let interval = null
+    if (stream.urls && subtitle && stream.id === content.id) {
+        interval = setInterval(() => {
+            if (playerCompRef.current) {
+                clearInterval(interval)
+                createDashPlayer(audio, stream, content, subtitle).then(player => {
+                    playerRef.current = player
+                    playerRef.current.play()
+                    setLoading(false)
+                    setIsPaused(false)
+                }).catch(handleCrunchyError)
             }
-            clearInterval(interval)
+        }, 100)
+    }
+    return () => {
+        setLoading(true)
+        if (playerRef.current) {
+            // Add this line to clean up quality enforcement interval
+            if (typeof cleanupPlayer === 'function') {
+                cleanupPlayer(playerRef.current);
+            }
+            playerRef.current.pause()
+            playerRef.current.destroy()
+            playerRef.current = null
         }
-    }, [profile, content, stream, audio, subtitle, setLoading, handleCrunchyError])
+        clearInterval(interval)
+    }
+}, [profile, content, stream, audio, subtitle, setLoading, handleCrunchyError])
 
     useEffect(() => {  // set stream session
         if (stream === emptyStream) {
